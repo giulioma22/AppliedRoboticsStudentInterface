@@ -3,14 +3,57 @@
 
 #include <stdexcept>
 #include <sstream>
+
+#include <experimental/filesystem>
+
 namespace student {
 
  void loadImage(cv::Mat& img_out, const std::string& config_folder){  
    throw std::logic_error( "STUDENT FUNCTION NOT IMPLEMENTED" );
  }
 
+static int i;
+static bool state = false;
+
  void genericImageListener(const cv::Mat& img_in, std::string topic, const std::string& config_folder){
-    throw std::logic_error( "STUDENT FUNCTION NOT IMPLEMENTED" );
+  	
+	if (!state) {
+		i = 0;
+		state = true;
+	}
+
+	//CREATES ONE FOLDER IF DOESN'T EXISTS
+	namespace fs = std::experimental::filesystem;
+	std::stringstream src;
+	src << config_folder << "saved_images/";
+
+
+	if (!fs::is_directory(src.str()) || !fs::exists(src.str())) { 
+	    fs::create_directory(src.str()); 
+	}
+
+	//SAVES IMAGE WHEN PRESS S ON THE KEYBOARD
+
+	cv::imshow( topic, img_in);
+	char k;
+	k = cv::waitKey(30);
+
+    	std::stringstream image;
+    	
+    	switch (k) {    	
+		case 's':
+				
+			image << src.str() << std::setfill('0') << std::setw(4) << (i++) << ".jpg";
+			std::cout << image.str() << std::endl;
+			cv::imwrite( image.str(), img_in );
+
+			std::cout << "The image" << image.str() << "was saved." << std::endl;
+		 	break;
+		default:
+			//std::cout << "TRENTO " << k << std::endl;
+				break;
+	} 
+
   }
 
   bool extrinsicCalib(const cv::Mat& img_in, std::vector<cv::Point3f> object_points, const cv::Mat& camera_matrix, cv::Mat& rvec, cv::Mat& tvec, const std::string& config_folder){
