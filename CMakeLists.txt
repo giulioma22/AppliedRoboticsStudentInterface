@@ -1,9 +1,13 @@
+## cmake minimum version
 cmake_minimum_required(VERSION 2.8.3)
+
+## Project name
 project(student_proect)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 add_compile_options(-std=c++11)
 
+## Required packages 
 find_package(OpenCV REQUIRED )
 find_package(project_interface REQUIRED )
 
@@ -14,11 +18,20 @@ include_directories(
  ${project_interface_INCLUDE_DIRS}
 )
 
+## Add executables
+add_executable(calibrate
+  src/camera_calibration.cpp
+  )
+
 ## CREATE EXECUTABLE LIBRARY
 add_library(student SHARED
-   src/student_interface.cpp
+  src/student_interface.cpp
 )
 
 target_link_libraries(student
   ${OpenCV_LIBRARIES}  
+)
+
+target_link_libraries(calibrate
+  ${OpenCV_LIBRARIES}
 )
