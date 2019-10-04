@@ -34,7 +34,7 @@ static bool state = false;
 
 	//SAVES IMAGE WHEN PRESS S ON THE KEYBOARD
 
-	cv::imshow( topic, img_in);
+	cv::imshow(topic, img_in);
 	char k;
 	k = cv::waitKey(30);
 
@@ -45,25 +45,25 @@ static bool state = false;
 				
 			image << src.str() << std::setfill('0') << std::setw(4) << (i++) << ".jpg";
 			std::cout << image.str() << std::endl;
-			cv::imwrite( image.str(), img_in );
+			cv::imwrite(image.str(), img_in);
 
 			std::cout << "The image" << image.str() << "was saved." << std::endl;
 		 	break;
 		default:
-			//std::cout << "TRENTO " << k << std::endl;
 				break;
 	} 
 
   }
 
   bool extrinsicCalib(const cv::Mat& img_in, std::vector<cv::Point3f> object_points, const cv::Mat& camera_matrix, cv::Mat& rvec, cv::Mat& tvec, const std::string& config_folder){
+
     throw std::logic_error( "STUDENT FUNCTION NOT IMPLEMENTED" );   
   }
 
   void imageUndistort(const cv::Mat& img_in, cv::Mat& img_out, 
           const cv::Mat& cam_matrix, const cv::Mat& dist_coeffs, const std::string& config_folder){
 
-    throw std::logic_error( "STUDENT FUNCTION NOT IMPLEMENTED" );  
+    cv::undistort(img_in, img_out, cam_matrix, dist_coeffs);
 
   }
 
