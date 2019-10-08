@@ -57,19 +57,7 @@ static bool state = false;
 
   bool extrinsicCalib(const cv::Mat& img_in, std::vector<cv::Point3f> object_points, const cv::Mat& camera_matrix, cv::Mat& rvec, cv::Mat& tvec, const std::string& config_folder){
 
-    std::string extrinsic_path = config_folder + "/extrinsicCalib.csv";
-    std::vector<cv::Point2f> imagePoints;
-    std::ifstream input_file(extrinsic_path);
-
-      while (!input_file.eof()){
-        double x, y;
-        imagePoints.emplace_back(x, y);
-      }
-      input_file.close();
-
-    bool result = cv::solvePnP(object_points, imagePoints, camera_matrix, {}, rvec, tvec);
-
-    return result;
+    throw std::logic_error( "STUDENT FUNCTION NOT IMPLEMENTED 0" );
 
   }
 
@@ -81,7 +69,7 @@ static bool state = false;
   }
  
   void findPlaneTransform(const cv::Mat& cam_matrix, const cv::Mat& rvec, const cv::Mat& tvec, const std::vector<cv::Point3f>& object_points_plane, cv::Mat& plane_transf, const std::string& config_folder){
-    throw std::logic_error( "STUDENT FUNCTION NOT IMPLEMENTED 1" );
+    throw std::logic_error( "STUDENT FUNCTION NOT IMPLEMENTED 1" );  
   }
 
 
