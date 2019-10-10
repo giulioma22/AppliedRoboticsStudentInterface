@@ -57,12 +57,18 @@ static bool state = false;
 
   bool extrinsicCalib(const cv::Mat& img_in, std::vector<cv::Point3f> object_points, const cv::Mat& camera_matrix, cv::Mat& rvec, cv::Mat& tvec, const std::string& config_folder){
 
-    std::string extrinsic_path = config_folder + "/extrinsicCalib.csv";
+    std::string extrinsic_path = config_folder + "extrinsicCalib.csv";
     std::vector<cv::Point2f> imagePoints;
     std::ifstream input_file(extrinsic_path);
 
       while (!input_file.eof()){
         double x, y;
+        if (!(input_file >> x >> y)) {
+          if (input_file.eof()) break;
+          else {
+            throw std::runtime_error("Malformed file: " + extrinsic_path);
+          }
+        }
         imagePoints.emplace_back(x, y);
       }
       input_file.close();
@@ -80,13 +86,16 @@ static bool state = false;
 
   }
  
-  void findPlaneTransform(const cv::Mat& cam_matrix, const cv::Mat& rvec, const cv::Mat& tvec, const std::vector<cv::Point3f>& object_points_plane, cv::Mat& plane_transf, const std::string& config_folder){
-    throw std::logic_error( "STUDENT FUNCTION NOT IMPLEMENTED 1" );
+  void findPlaneTransform(const cv::Mat& cam_matrix, const cv::Mat& rvec, const cv::Mat& tvec, const std::vector<cv::Point3f>& object_points_plane, const std::vector<cv::Point2f>& dest_image_points_plane, cv::Mat& plane_transf, const std::string& config_folder){
+
+    cv::Mat image_points;
+    cv::projectPoints(object_points_plane, rvec, tvec, cam_matrix, cv::Mat(), image_points);
+    plane_transf = cv::getPerspectiveTransform(image_points, dest_image_points_plane);
+
   }
 
-
-  void unwarp(const cv::Mat& img_in, cv::Mat& img_out, const cv::Mat& transf, const double scale, const std::string& config_folder){
-    throw std::logic_error( "STUDENT FUNCTION NOT IMPLEMENTED 2" );   
+  void unwarp(const cv::Mat& img_in, cv::Mat& img_out, const cv::Mat& transf, const std::string& config_folder){
+    cv::warpPerspective(img_in, img_out, transf, img_in.size());
   }
 
   bool processMap(const cv::Mat& img_in, const double scale, std::vector<Polygon>& obstacle_list, std::vector<std::pair<int,Polygon>>& victim_list, Polygon& gate, const std::string& config_folder){
