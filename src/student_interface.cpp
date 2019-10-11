@@ -168,7 +168,7 @@ static bool state = false;
     
     bool gate_found = false;
 
-    for(auto& contour : contours){
+    /*for(auto& contour : contours){
       const double area = cv::contourArea(contour);
       if (area > 500){
         // Approximate polygon w/ fewer vertices if not precise
@@ -181,6 +181,18 @@ static bool state = false;
         gate_found = true;
         break;
       }      
+    }*/
+
+    for(auto& contour : contours){
+      // Approximate polygon w/ fewer vertices if not precise
+      approxPolyDP(contour, approx_curve, 30, true);
+      if (approx_curve.size() != 4) continue;
+      for (const auto& pt: approx_curve) {
+        // Store (scaled) values of gate
+        gate.emplace_back(pt.x/scale, pt.y/scale);
+      }
+      gate_found = true;
+      break;
     }
     
     return gate_found;
