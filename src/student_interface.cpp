@@ -4,12 +4,51 @@
 #include <stdexcept>
 #include <sstream>
 
+#include <vector>
+#include <atomic>
+#include <unistd.h>
+
 #include <experimental/filesystem>
 
 namespace student {
 
- void loadImage(cv::Mat& img_out, const std::string& config_folder){  
-   throw std::logic_error( "STUDENT FUNCTION NOT IMPLEMENTED" );
+void loadImage(cv::Mat& img_out, const std::string& config_folder){  
+  static bool initialized = false;
+  static std::vector<cv::String> img_list; // list of images to load
+  static size_t idx = 0;  // idx of the current img
+  static size_t function_call_counter = 0;  // idx of the current img
+  const static size_t freeze_img_n_step = 30; // hold the current image for n iteration
+  static cv::Mat current_img; // store the image for a period, avoid to load it from file every time
+  
+  if(!initialized){
+    const bool recursive = false;
+    // Load the list of jpg image contained in the config_folder/img_to_load/
+    cv::glob(config_folder + "/img_to_load/*.jpg", img_list, recursive);
+    
+    if(img_list.size() > 0){
+      initialized = true;
+      idx = 0;
+      current_img = cv::imread(img_list[idx]);
+      function_call_counter = 0;
+    }else{
+      initialized = false;
+    }
+  }
+  
+  if(!initialized){
+    throw std::logic_error( "Load Image can not find any jpg image in: " +  config_folder + "/img_to_load/");
+    return;
+  }
+  
+  img_out = current_img;
+  function_call_counter++;  
+  
+  // If the function is called more than N times load increment image idx
+  if(function_call_counter > freeze_img_n_step){
+    function_call_counter = 0;
+    idx = (idx + 1)%img_list.size();    
+    current_img = cv::imread(img_list[idx]);
+  }
  }
 
 static int i;
@@ -55,11 +94,75 @@ static bool state = false;
 
   }
 
+
+// Function to pick arena points - - - - - - -
+
+  static cv::Mat bg_img;
+  static std::vector<cv::Point2f> result;
+  static std::string name;
+  static std::atomic<bool> done;
+  static int n;
+  static double show_scale = 2.0;
+
+  void mouseCallback(int event, int x, int y, int, void* p)
+  {
+    if (event != cv::EVENT_LBUTTONDOWN || done.load()) return;
+    
+    result.emplace_back(x*show_scale, y*show_scale);
+    cv::circle(bg_img, cv::Point(x,y), 20/show_scale, cv::Scalar(0,0,255), -1);
+    cv::imshow(name.c_str(), bg_img);
+
+    if (result.size() >= n) {
+      usleep(500*1000);
+      done.store(true);
+    }
+  }
+
+  std::vector<cv::Point2f> pickNPoints(int n0, const cv::Mat& img)
+  {
+    result.clear();
+    cv::Size small_size(img.cols/show_scale, img.rows/show_scale);
+    cv::resize(img, bg_img, small_size);
+    //bg_img = img.clone();
+    name = "Pick " + std::to_string(n0) + " points";
+    cv::imshow(name.c_str(), bg_img);
+    cv::namedWindow(name.c_str());
+    n = n0;
+
+    done.store(false);
+
+    cv::setMouseCallback(name.c_str(), &mouseCallback, nullptr);
+    while (!done.load()) {
+      cv::waitKey(500);
+    }
+
+    cv::destroyWindow(name.c_str());
+    return result;
+  }
+
+// - - - - - - - - - 
+
+
   bool extrinsicCalib(const cv::Mat& img_in, std::vector<cv::Point3f> object_points, const cv::Mat& camera_matrix, cv::Mat& rvec, cv::Mat& tvec, const std::string& config_folder){
 
     std::string extrinsic_path = config_folder + "extrinsicCalib.csv";
     std::vector<cv::Point2f> imagePoints;
-    std::ifstream input_file(extrinsic_path);
+
+  if (!std::experimental::filesystem::exists(extrinsic_path)){
+          
+    std::experimental::filesystem::create_directories(config_folder);
+    imagePoints = pickNPoints(4, img_in);
+    std::ofstream output(extrinsic_path);
+
+      if (!output.is_open()){
+        throw std::runtime_error("Cannot write file: " + extrinsic_path);
+      }
+      for (const auto pt: imagePoints) {
+        output << pt.x << " " << pt.y << std::endl;
+      }
+      output.close();
+  }else{
+      std::ifstream input_file(extrinsic_path);
 
       while (!input_file.eof()){
         double x, y;
@@ -72,6 +175,7 @@ static bool state = false;
         imagePoints.emplace_back(x, y);
       }
       input_file.close();
+  }
 
     bool result = cv::solvePnP(object_points, imagePoints, camera_matrix, {}, rvec, tvec);
 
@@ -102,7 +206,8 @@ static bool state = false;
     
     cv::Mat red_mask_low, red_mask_high, red_mask;
     cv::inRange(hsv_img, cv::Scalar(0, 72, 105), cv::Scalar(20, 255, 255), red_mask_low);
-    cv::inRange(hsv_img, cv::Scalar(175, 10, 10), cv::Scalar(179, 255, 255), red_mask_high);
+    //cv::inRange(hsv_img, cv::Scalar(175, 10, 10), cv::Scalar(179, 255, 255), red_mask_high);
+    cv::inRange(hsv_img, cv::Scalar(130, 81, 49), cv::Scalar(180, 255, 150), red_mask_high);
     cv::addWeighted(red_mask_low, 1.0, red_mask_high, 1.0, 0.0, red_mask);
     
     // Find red regions
@@ -131,7 +236,8 @@ static bool state = false;
   bool detect_green_victims(const cv::Mat& hsv_img, const double scale, std::vector<std::pair<int,Polygon>>& victim_list){
     
     cv::Mat green_mask_victims;
-    cv::inRange(hsv_img, cv::Scalar(50, 80, 34), cv::Scalar(75, 255, 255), green_mask_victims);
+    //cv::inRange(hsv_img, cv::Scalar(50, 80, 34), cv::Scalar(75, 255, 255), green_mask_victims);
+    cv::inRange(hsv_img, cv::Scalar(13, 68, 41), cv::Scalar(86, 255, 80), green_mask_victims);
 
     // Find green regions - VICTIMS
     std::vector<std::vector<cv::Point>> contours, contours_approx;
@@ -158,7 +264,8 @@ static bool state = false;
   bool detect_green_gate(const cv::Mat& hsv_img, const double scale, Polygon& gate){
 
     cv::Mat green_mask_gate;    
-    cv::inRange(hsv_img, cv::Scalar(50, 80, 34), cv::Scalar(75, 255, 255), green_mask_gate);
+    //cv::inRange(hsv_img, cv::Scalar(50, 80, 34), cv::Scalar(75, 255, 255), green_mask_gate);
+    cv::inRange(hsv_img, cv::Scalar(13, 68, 41), cv::Scalar(86, 255, 80), green_mask_gate);
     
     // Find green regions - GATE
     std::vector<std::vector<cv::Point>> contours, contours_approx;
@@ -201,7 +308,8 @@ static bool state = false;
   bool detect_blue_robot(const cv::Mat& hsv_img, const double scale, Polygon& triangle, double& x, double& y, double& theta){
 
     cv::Mat blue_mask;    
-    cv::inRange(hsv_img, cv::Scalar(92, 80, 50), cv::Scalar(145, 255, 255), blue_mask);
+    //cv::inRange(hsv_img, cv::Scalar(92, 80, 50), cv::Scalar(145, 255, 255), blue_mask);
+    cv::inRange(hsv_img, cv::Scalar(96, 92, 55), cv::Scalar(145, 255, 255), blue_mask);
 
     // Process blue mask
     std::vector<std::vector<cv::Point>> contours, contours_approx;
