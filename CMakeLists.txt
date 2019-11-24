@@ -23,14 +23,28 @@ add_executable(calibrate
   src/camera_calibration.cpp
   )
 
+add_executable(test_dubins
+  src/test_dubins.cpp
+  )
+
+
 ## Add shared library
 add_library(student SHARED
    src/student_interface.cpp
 )
 
+add_library(dubins SHARED
+   src/dubins.cpp
+)
+
 ## Link with libraries 
 target_link_libraries(student
   ${OpenCV_LIBRARIES}  
+  dubins
+)
+
+target_link_libraries(test_dubins
+  dubins
 )
 
 target_link_libraries(calibrate
