@@ -37,6 +37,10 @@ add_library(dubins SHARED
    src/dubins.cpp
 )
 
+add_library(polyclipping SHARED
+   src/clipper/clipper.cpp
+)
+
 ## Link with libraries 
 target_link_libraries(student
   ${OpenCV_LIBRARIES}  

@@ -16,6 +16,8 @@
 #include <opencv2/opencv.hpp>
 #include <iostream>
 
+#include "clipper/clipper.hpp"
+
 namespace student {
 
 void loadImage(cv::Mat& img_out, const std::string& config_folder){  
@@ -219,7 +221,9 @@ static bool state = false;
     // Find red regions
     std::vector<std::vector<cv::Point>> contours, contours_approx;
     std::vector<cv::Point> approx_curve;
+    //cv::Mat contours_img;
     // Process red mask
+    //contours_img = hsv_img.clone();
     cv::findContours(red_mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
 
     for (int i=0; i<contours.size(); ++i)
@@ -234,8 +238,11 @@ static bool state = false;
       }
       // Add obstacle to list
       obstacle_list.push_back(scaled_contour);
+      //contours_approx = {approx_curve};
+      //drawContours(contours_img, contours_approx, -1, cv::Scalar(0,170,220), 3, cv::LINE_AA);
     }
-
+    //cv::imshow("Original", contours_img);
+    //cv::waitKey(0);
     return true;
   }
   
@@ -294,7 +301,7 @@ static bool state = false;
         scaled_contour.emplace_back(pt.x/scale, pt.y/scale);
       }
       // Add victims to the vec_scaled_contour
-      vec_scaled_contour.push_back(scaled_contour);*/
+      vec_scaled_contour.push_back(scaled_contour);*/ 
 
       contours_approx = {approx_curve};
       // Draw the contours on image with a line color of BGR=(0,170,220) and a width of 3
@@ -373,7 +380,7 @@ static bool state = false;
       }
 
 	
-      //victim_list.push_back({maxIdx + 1, vec_scaled_contour.at(i)}); Missing return
+      //victim_list.push_back({maxIdx + 1, vec_scaled_contour.at(i)}); //Missing return
       
       // Display the best fitting number 
       std::cout << "Best fitting template: " << maxIdx + 1 << std::endl; 
@@ -517,10 +524,36 @@ static bool state = false;
   }
 
   bool planPath(const Polygon& borders, const std::vector<Polygon>& obstacle_list, const std::vector<std::pair<int,Polygon>>& victim_list, const Polygon& gate, const float x, const float y, const float theta, Path& path, const std::string& config_folder){
+    
+  
+  ClipperLib::Paths newPoly;
 
-    return true;
+  const double INT_ROUND = 1000.;
+  for (size_t i = 0; i<obstacle_list.size(); i++){  
+    ClipperLib::Path srcPoly;
+    for (size_t j = 0; j<obstacle_list.at(i).size(); j++){
+      int x = obstacle_list.at(i).at(j).x * INT_ROUND;
+      int y = obstacle_list.at(i).at(j).y * INT_ROUND;
+      srcPoly << ClipperLib::IntPoint (x,y);
+    }
+    ClipperLib::ClipperOffset co;
+    co.AddPath(srcPoly, ClipperLib::jtRound, ClipperLib::etClosedPolygon);
+    co.Execute(newPoly, -7.0);   
+  }
 
+  std::vector<Polygon> obstacle_inflate_list;
+  for (const ClipperLib::Path &path: newPoly){
+    Polygon obs_inf;
+    for (const ClipperLib::IntPoint &pt: path){
+      double x = pt.X / INT_ROUND;
+      double y = pt.Y / INT_ROUND;
+      obs_inf.push_back(Point(x,y));
+    }
+    obstacle_inflate_list.push_back(obs_inf);
+  }
+  
 
+  return true;
   }    
 
 }
