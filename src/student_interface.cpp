@@ -287,7 +287,7 @@ static bool state = false;
 
     // create an array of rectangle (i.e. bounding box containing the green area contour)  
     std::vector<cv::Rect> boundRect(contours.size());
-    //std::vector<Polygon> vec_scaled_contour(contours.size());
+    int victim_id = 0;
     for (int i=0; i<contours.size(); ++i){
       double area = cv::contourArea(contours[i]);
       if (area < MIN_AREA_SIZE) continue; // filter too small contours to remove false positives
@@ -296,12 +296,12 @@ static bool state = false;
       approxPolyDP(contours[i], approx_curve, 10, true);
       if(approx_curve.size() < 6) continue; //fitler out the gate 
      
-      /*Polygon scaled_contour;
+      Polygon scaled_contour;
       for (const auto& pt: approx_curve) {
         scaled_contour.emplace_back(pt.x/scale, pt.y/scale);
       }
-      // Add victims to the vec_scaled_contour
-      vec_scaled_contour.push_back(scaled_contour);*/ 
+      // Add victims to the victim_list
+      victim_list.push_back({victim_id++, scaled_contour}); 
 
       contours_approx = {approx_curve};
       // Draw the contours on image with a line color of BGR=(0,170,220) and a width of 3
@@ -347,7 +347,7 @@ static bool state = false;
       // of the number in the ROI
       cv::resize(processROI, processROI, cv::Size(200, 200)); // resize the ROI 
       cv::threshold( processROI, processROI, 100, 255, 0 );   // threshold and binarize the image, to suppress some noise
-    
+   
       // Apply some additional smoothing and filtering
       cv::erode(processROI, processROI, kernel);
       cv::GaussianBlur(processROI, processROI, cv::Size(5, 5), 2, 2);
@@ -378,9 +378,8 @@ static bool state = false;
           }
         }
       }
-
-	
-      //victim_list.push_back({maxIdx + 1, vec_scaled_contour.at(i)}); //Missing return
+      
+      victim_list.at(i-2).first = maxIdx + 1;
       
       // Display the best fitting number 
       std::cout << "Best fitting template: " << maxIdx + 1 << std::endl; 
@@ -529,9 +528,9 @@ static bool state = false;
   ClipperLib::Paths newPoly;
 
   const double INT_ROUND = 1000.;
-  for (size_t i = 0; i<obstacle_list.size(); i++){  
+  for (size_t i = 0; i<obstacle_list.size(); ++i){  
     ClipperLib::Path srcPoly;
-    for (size_t j = 0; j<obstacle_list.at(i).size(); j++){
+    for (size_t j = 0; j<obstacle_list.at(i).size(); ++j){
       int x = obstacle_list.at(i).at(j).x * INT_ROUND;
       int y = obstacle_list.at(i).at(j).y * INT_ROUND;
       srcPoly << ClipperLib::IntPoint (x,y);
