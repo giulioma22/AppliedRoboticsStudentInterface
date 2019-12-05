@@ -10,13 +10,7 @@
 
 #include <experimental/filesystem>
 
-#include <opencv2/core.hpp>
-#include <opencv2/videoio.hpp>
-#include <opencv2/highgui.hpp>
-#include <opencv2/opencv.hpp>
-#include <iostream>
-
-#include "clipper/clipper.hpp"
+#include "clipper/cpp/clipper.hpp"
 
 namespace student {
 
@@ -221,9 +215,7 @@ static bool state = false;
     // Find red regions
     std::vector<std::vector<cv::Point>> contours, contours_approx;
     std::vector<cv::Point> approx_curve;
-    //cv::Mat contours_img;
     // Process red mask
-    //contours_img = hsv_img.clone();
     cv::findContours(red_mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
 
     for (int i=0; i<contours.size(); ++i)
@@ -238,154 +230,75 @@ static bool state = false;
       }
       // Add obstacle to list
       obstacle_list.push_back(scaled_contour);
-      //contours_approx = {approx_curve};
-      //drawContours(contours_img, contours_approx, -1, cv::Scalar(0,170,220), 3, cv::LINE_AA);
     }
-    //cv::imshow("Original", contours_img);
-    //cv::waitKey(0);
+
+	std::vector<Polygon> inflated_obstacles;
+
+	const double INT_ROUND = 1000.;
+
+	for (int obs = 0; obs < obstacle_list.size(); ++obs) {
+
+		ClipperLib::Path srcPoly;
+		ClipperLib::Paths newPoly;
+		ClipperLib::ClipperOffset co;
+
+		for (int ver = 0; ver < obstacle_list[obs].size(); ++ver){
+			int x = obstacle_list[obs][ver].x * INT_ROUND;
+			int y = obstacle_list[obs][ver].y * INT_ROUND;
+			srcPoly << ClipperLib::IntPoint(x,y);
+		}
+
+
+		co.AddPath(srcPoly, ClipperLib::jtSquare, ClipperLib::etClosedPolygon);
+
+		co.Execute(newPoly, 50);	// Int is inflation idx
+
+		for (const ClipperLib::Path &path: newPoly){
+			// Obstacle obst = create data structure for current obstacle...
+			Polygon obst;
+			for (const ClipperLib::IntPoint &pt: path){
+				double x = pt.X / INT_ROUND;
+				double y = pt.Y / INT_ROUND;
+				// Add vertex (x,y) to current obstacle...
+				obst.emplace_back(x,y); 
+			}
+			// Close and export current obstacle...
+  			inflated_obstacles.push_back(obst);
+			obstacle_list[obs] = obst;
+		}
+	
+	}
+
     return true;
+
   }
-  
-  cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
-    cv::Mat out_ROI;
-    cv::Point center(in_ROI.cols/2., in_ROI.rows/2.);  
- 
-    cv::Mat rot_mat = cv::getRotationMatrix2D(center, ang_degrees, 1.0);
-    
-    warpAffine(in_ROI, out_ROI, rot_mat, in_ROI.size());
-    return out_ROI;
-  }
-  
-  const double MIN_AREA_SIZE = 100;
-  std::string template_folder = "/home/lar2019/workspace/project/template/";
+
   bool detect_green_victims(const cv::Mat& hsv_img, const double scale, std::vector<std::pair<int,Polygon>>& victim_list){
     
-    // Find green regions
     cv::Mat green_mask_victims;
-    
-    // store a binary image in green_mask where the white pixel are those contained in HSV rage (x,x,x) --> (y,y,y)
     //cv::inRange(hsv_img, cv::Scalar(50, 80, 34), cv::Scalar(75, 255, 255), green_mask_victims);
     cv::inRange(hsv_img, cv::Scalar(13, 68, 41), cv::Scalar(86, 255, 80), green_mask_victims);
 
-    // Apply some filtering
-    // Create the kernel of the filter i.e. a rectanble with dimension 3x3
-    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size((1*2) + 1, (1*2)+1));
-    // Dilate using the generated kernel
-    cv::dilate(green_mask_victims, green_mask_victims, kernel);
-    // Erode using the generated kernel
-    cv::erode(green_mask_victims,  green_mask_victims, kernel);
+    // Find green regions - VICTIMS
+    std::vector<std::vector<cv::Point>> contours, contours_approx;
+    std::vector<cv::Point> approx_curve;
+    // Process green mask - VICTIMS
+    cv::findContours(green_mask_victims, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
 
-    // Find green contours
-    std::vector<std::vector<cv::Point>> contours, contours_approx;  
-  
-    // Create an image which we can modify not changing the original image
-    cv::Mat contours_img;
-    contours_img = hsv_img.clone();
+    for (int i=0; i<contours.size(); ++i)
+    {
+      // Approximate polygon w/ fewer vertices if not precise
+      approxPolyDP(contours[i], approx_curve, 1, true);
 
-    // Finds green contours in a binary (new) image
-    cv::findContours(green_mask_victims, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE); 
-
-    // create an array of rectangle (i.e. bounding box containing the green area contour)  
-    std::vector<cv::Rect> boundRect(contours.size());
-    int victim_id = 0;
-    for (int i=0; i<contours.size(); ++i){
-      double area = cv::contourArea(contours[i]);
-      if (area < MIN_AREA_SIZE) continue; // filter too small contours to remove false positives
-
-      std::vector<cv::Point> approx_curve;
-      approxPolyDP(contours[i], approx_curve, 10, true);
-      if(approx_curve.size() < 6) continue; //fitler out the gate 
-     
       Polygon scaled_contour;
       for (const auto& pt: approx_curve) {
         scaled_contour.emplace_back(pt.x/scale, pt.y/scale);
       }
-      // Add victims to the victim_list
-      victim_list.push_back({victim_id++, scaled_contour}); 
-
-      contours_approx = {approx_curve};
-      // Draw the contours on image with a line color of BGR=(0,170,220) and a width of 3
-      drawContours(contours_img, contours_approx, -1, cv::Scalar(0,170,220), 3, cv::LINE_AA);
-
-      // find the bounding box of the green blob approx curve
-      boundRect[i] = boundingRect(cv::Mat(approx_curve)); 
+      // Add victim to list
+      victim_list.push_back({i+1, scaled_contour});
     }
-
-    cv::Mat green_mask_victims_inv;
-
-    // Init a matrix specify its dimension (img.rows, img.cols), default color(255,255,255) and elemet type (CV_8UC3).
-    cv::Mat filtered(hsv_img.rows, hsv_img.cols, CV_8UC3, cv::Scalar(255,255,255));
-
-    // generate binary mask with inverted pixels w.r.t. green mask -> black numbers are part of this mask
-    cv::bitwise_not(green_mask_victims, green_mask_victims_inv); 
-
-    // Load digits template images
-    std::vector<cv::Mat> templROIs;
-    for (int i=1; i<=5; ++i) {
-      auto num_template = cv::imread(template_folder + std::to_string(i) + ".png");
-      // mirror the template, we want them to have the same shape of the number that we have in the unwarped ground image
-      cv::flip(num_template, num_template, 1); 
-
-      // Store the template in templROIs (vector of mat)
-      templROIs.emplace_back(num_template);
-    }  
-  
-    // create copy of image without green shapes
-    hsv_img.copyTo(filtered, green_mask_victims_inv);
-
-    // create a 3x3 recttangular kernel for img filtering
-    kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size((2*2) + 1, (2*2)+1));
-  
-    // For each green blob in the original image containing a digit
-    for (int i=0; i<boundRect.size(); ++i){
-      // Constructor of mat, we pass the original image and the coordinate to copy and we obtain an image pointing to that subimage
-      cv::Mat processROI(filtered, boundRect[i]); // extract the ROI containing the digit
     
-      if (processROI.empty()) continue;
-    
-      // The size of the number in the Template image should be similar to the dimension
-      // of the number in the ROI
-      cv::resize(processROI, processROI, cv::Size(200, 200)); // resize the ROI 
-      cv::threshold( processROI, processROI, 100, 255, 0 );   // threshold and binarize the image, to suppress some noise
-   
-      // Apply some additional smoothing and filtering
-      cv::erode(processROI, processROI, kernel);
-      cv::GaussianBlur(processROI, processROI, cv::Size(5, 5), 2, 2);
-      cv::erode(processROI, processROI, kernel);
-
-      // Find the template digit with the best matching
-      double maxScore = 0;
-      int maxIdx = -1;
-      cv::Mat rot_processROI(filtered, boundRect[i]);
-      for(int k=0;k<36;++k){
-        //Rotate processROI
-        rot_processROI = rotate(processROI, 10*k);
-        
-        for (int j=0; j<templROIs.size(); ++j) {
-          cv::Mat result;
-
-          // Match the ROI with the templROIs j-th
-          cv::matchTemplate(rot_processROI, templROIs[j], result, cv::TM_CCOEFF);
-          double score;
-          cv::minMaxLoc(result, nullptr, &score); 
-
-          // Compare the score with the others, if it is higher save this as the best match!
-          if (score > maxScore) {
-            maxScore = score;
-            maxIdx = j;
-
-            cv::imshow("ROI", rot_processROI);
-          }
-        }
-      }
-      
-      victim_list.at(i-2).first = maxIdx + 1;
-      
-      // Display the best fitting number 
-      std::cout << "Best fitting template: " << maxIdx + 1 << std::endl; 
-      cv::waitKey(0);
-    } 
-    return true; 
+    return true;
   }
 
   bool detect_green_gate(const cv::Mat& hsv_img, const double scale, Polygon& gate){
@@ -523,36 +436,9 @@ static bool state = false;
   }
 
   bool planPath(const Polygon& borders, const std::vector<Polygon>& obstacle_list, const std::vector<std::pair<int,Polygon>>& victim_list, const Polygon& gate, const float x, const float y, const float theta, Path& path, const std::string& config_folder){
-    
-  
-  ClipperLib::Paths newPoly;
+	
+	
 
-  const double INT_ROUND = 1000.;
-  for (size_t i = 0; i<obstacle_list.size(); ++i){  
-    ClipperLib::Path srcPoly;
-    for (size_t j = 0; j<obstacle_list.at(i).size(); ++j){
-      int x = obstacle_list.at(i).at(j).x * INT_ROUND;
-      int y = obstacle_list.at(i).at(j).y * INT_ROUND;
-      srcPoly << ClipperLib::IntPoint (x,y);
-    }
-    ClipperLib::ClipperOffset co;
-    co.AddPath(srcPoly, ClipperLib::jtRound, ClipperLib::etClosedPolygon);
-    co.Execute(newPoly, -7.0);   
-  }
-
-  std::vector<Polygon> obstacle_inflate_list;
-  for (const ClipperLib::Path &path: newPoly){
-    Polygon obs_inf;
-    for (const ClipperLib::IntPoint &pt: path){
-      double x = pt.X / INT_ROUND;
-      double y = pt.Y / INT_ROUND;
-      obs_inf.push_back(Point(x,y));
-    }
-    obstacle_inflate_list.push_back(obs_inf);
-  }
-  
-
-  return true;
   }    
 
 }

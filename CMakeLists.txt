@@ -45,6 +45,7 @@ add_library(polyclipping SHARED
 target_link_libraries(student
   ${OpenCV_LIBRARIES}  
   dubins
+  polyclipping
 )
 
 target_link_libraries(test_dubins
