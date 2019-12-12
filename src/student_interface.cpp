@@ -252,7 +252,7 @@ static bool state = false;
 
 		co.AddPath(srcPoly, ClipperLib::jtSquare, ClipperLib::etClosedPolygon);
 
-		co.Execute(newPoly, 50);	// Int is inflation idx
+		co.Execute(newPoly, 50);	// Int is obstacle inflation idx
 
 		for (const ClipperLib::Path &path: newPoly){
 			// Obstacle obst = create data structure for current obstacle...
@@ -555,25 +555,18 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
   }
 
   bool planPath(const Polygon& borders, const std::vector<Polygon>& obstacle_list, const std::vector<std::pair<int,Polygon>>& victim_list, const Polygon& gate, const float x, const float y, const float theta, Path& path, const std::string& config_folder){
-	
-	// - - - Default circular path - - -
-	/*float xc = 0, yc = 1.5, r = 1.4;
-	float ds = 0.05;
-	for (float theta = -M_PI/2, s = 0; theta<(-M_PI/2+1.2); theta+=ds/r, s+=ds){
-		path.points.emplace_back(s,xc+r*std::cos(theta),yc+r*std::sin(theta), theta+M_PI/2, 1./r);
-	}*/
 
-	int kmax = 10;
-
+	int kmax = 10;		// Max angle of curvature
 	int npts = 100;		// Standard discretization unit of arcs
-	std::vector<std::vector<double>> pts;
+	std::vector<std::vector<double>> pts;	// Placeholder for arc discretiz 
 
-	// TODO: compute center of gate for xf, yf 
+	// Compute center of gate
+	double gateX = (gate[0].x + gate[1].x + gate[2].x + gate[3].x)/4;
+	double gateY = (gate[0].y + gate[1].y + gate[2].y + gate[3].y)/4;
+	double gateTh = M_PI/2;
 
 	dubinsCurve newDubins;
-	dubins_shortest_path(newDubins, x, y, theta, 1.3, 1, 1.2, kmax);
-
-	//std::cout << newDubins.arc_1.x0 << " ~ " << newDubins.arc_1.y0 << " ~ " << newDubins.arc_1.th0 << " ~ " << newDubins.arc_1.k << " ~ " << newDubins.arc_1.s << " ~ " << newDubins.arc_1.xf << " ~ " << newDubins.arc_1.yf << " ~ " << newDubins.arc_1.thf << std::endl;
+	dubins_shortest_path(newDubins, x, y, theta, gateX, gateY, gateTh, kmax);
 
 	double s = 0;
 	float ds = newDubins.L/npts;
