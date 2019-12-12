@@ -10,6 +10,7 @@
 
 #include <experimental/filesystem>
 
+#include "dubins.h"
 #include "clipper/cpp/clipper.hpp"
 
 namespace student {
@@ -273,6 +274,50 @@ static bool state = false;
 
   }
 
+  bool detect_green_gate(const cv::Mat& hsv_img, const double scale, Polygon& gate){
+
+    cv::Mat green_mask_gate;    
+    //cv::inRange(hsv_img, cv::Scalar(50, 80, 34), cv::Scalar(75, 255, 255), green_mask_gate);
+    cv::inRange(hsv_img, cv::Scalar(13, 68, 41), cv::Scalar(86, 255, 80), green_mask_gate);
+    
+    // Find green regions - GATE
+    std::vector<std::vector<cv::Point>> contours, contours_approx;
+    std::vector<cv::Point> approx_curve;
+    // Process green mask - GATE
+    cv::findContours(green_mask_gate, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+    
+    bool gate_found = false;
+
+    /*for(auto& contour : contours){
+      const double area = cv::contourArea(contour);
+      if (area > 500){
+        // Approximate polygon w/ fewer vertices if not precise
+        approxPolyDP(contour, approx_curve, 3, true);
+
+        for (const auto& pt: approx_curve) {
+          // Store (scaled) values of gate
+          gate.emplace_back(pt.x/scale, pt.y/scale);
+        }
+        gate_found = true;
+        break;
+      }      
+    }*/
+
+    for(auto& contour : contours){
+      // Approximate polygon w/ fewer vertices if not precise
+      approxPolyDP(contour, approx_curve, 30, true);
+      if (approx_curve.size() != 4) continue;
+      for (const auto& pt: approx_curve) {
+        // Store (scaled) values of gate
+        gate.emplace_back(pt.x/scale, pt.y/scale);
+      }
+      gate_found = true;
+      break;
+    }
+    
+    return gate_found;
+  }
+
 cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
     cv::Mat out_ROI;
     cv::Point2f center(in_ROI.cols/2., in_ROI.rows/2.);  
@@ -407,60 +452,16 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
             maxScore = score;
             maxIdx = j;
 
-            cv::imshow("ROI", rot_processROI);
+            //cv::imshow("ROI", rot_processROI);
           }
         }
       }
       victim_list.at(victim_counter).first = maxIdx + 1;
       // Display the best fitting number 
-      std::cout << "Best fitting template: " << maxIdx + 1 << std::endl; 
-      cv::waitKey(0);
+      //std::cout << "Best fitting template: " << maxIdx + 1 << std::endl; 
+      //cv::waitKey(0);
     } 
     return true; 
-  }
-
-  bool detect_green_gate(const cv::Mat& hsv_img, const double scale, Polygon& gate){
-
-    cv::Mat green_mask_gate;    
-    //cv::inRange(hsv_img, cv::Scalar(50, 80, 34), cv::Scalar(75, 255, 255), green_mask_gate);
-    cv::inRange(hsv_img, cv::Scalar(13, 68, 41), cv::Scalar(86, 255, 80), green_mask_gate);
-    
-    // Find green regions - GATE
-    std::vector<std::vector<cv::Point>> contours, contours_approx;
-    std::vector<cv::Point> approx_curve;
-    // Process green mask - GATE
-    cv::findContours(green_mask_gate, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
-    
-    bool gate_found = false;
-
-    /*for(auto& contour : contours){
-      const double area = cv::contourArea(contour);
-      if (area > 500){
-        // Approximate polygon w/ fewer vertices if not precise
-        approxPolyDP(contour, approx_curve, 3, true);
-
-        for (const auto& pt: approx_curve) {
-          // Store (scaled) values of gate
-          gate.emplace_back(pt.x/scale, pt.y/scale);
-        }
-        gate_found = true;
-        break;
-      }      
-    }*/
-
-    for(auto& contour : contours){
-      // Approximate polygon w/ fewer vertices if not precise
-      approxPolyDP(contour, approx_curve, 30, true);
-      if (approx_curve.size() != 4) continue;
-      for (const auto& pt: approx_curve) {
-        // Store (scaled) values of gate
-        gate.emplace_back(pt.x/scale, pt.y/scale);
-      }
-      gate_found = true;
-      break;
-    }
-    
-    return gate_found;
   }
 
   bool detect_blue_robot(const cv::Mat& hsv_img, const double scale, Polygon& triangle, double& x, double& y, double& theta){
@@ -555,7 +556,53 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 
   bool planPath(const Polygon& borders, const std::vector<Polygon>& obstacle_list, const std::vector<std::pair<int,Polygon>>& victim_list, const Polygon& gate, const float x, const float y, const float theta, Path& path, const std::string& config_folder){
 	
-	
+	// - - - Default circular path - - -
+	/*float xc = 0, yc = 1.5, r = 1.4;
+	float ds = 0.05;
+	for (float theta = -M_PI/2, s = 0; theta<(-M_PI/2+1.2); theta+=ds/r, s+=ds){
+		path.points.emplace_back(s,xc+r*std::cos(theta),yc+r*std::sin(theta), theta+M_PI/2, 1./r);
+	}*/
+
+	int kmax = 10;
+
+	int npts = 100;		// Standard discretization unit of arcs
+	std::vector<std::vector<double>> pts;
+
+	// TODO: compute center of gate for xf, yf 
+
+	dubinsCurve newDubins;
+	dubins_shortest_path(newDubins, x, y, theta, 1.3, 1, 1.2, kmax);
+
+	//std::cout << newDubins.arc_1.x0 << " ~ " << newDubins.arc_1.y0 << " ~ " << newDubins.arc_1.th0 << " ~ " << newDubins.arc_1.k << " ~ " << newDubins.arc_1.s << " ~ " << newDubins.arc_1.xf << " ~ " << newDubins.arc_1.yf << " ~ " << newDubins.arc_1.thf << std::endl;
+
+	double s = 0;
+	float ds = newDubins.L/npts;
+
+	// Discretize 1st arc of Dubins curve
+	discretize_arc(newDubins.arc_1, npts, pts);
+
+	for (int i = 0; i < pts.size(); i++){
+		path.points.emplace_back(s,pts[i][1],pts[i][2],pts[i][3],pts[i][4]);
+		s += ds;
+	}
+
+	// Discretize 2nd arc of Dubins curve
+	pts = {};
+	discretize_arc(newDubins.arc_2, npts, pts);
+
+	for (int i = 0; i < pts.size(); i++){
+		path.points.emplace_back(s,pts[i][1],pts[i][2],pts[i][3],pts[i][4]);
+		s += ds;
+	}
+
+	// Discretize 3rd arc of Dubins curve
+	pts = {};
+	discretize_arc(newDubins.arc_3, npts, pts);
+
+	for (int i = 0; i < pts.size(); i++){
+		path.points.emplace_back(s,pts[i][1],pts[i][2],pts[i][3],pts[i][4]);
+		s += ds;
+	}
 
   }    
 
