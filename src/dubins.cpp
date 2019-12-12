@@ -67,9 +67,9 @@ void scaleToStandard(double x0, double y0, double th0, double xf, double yf,
 
 	double dx = xf - x0;
 	double dy = yf - y0;
-	double phi = atan2(dy,dx)/2.0;
-	
+	double phi = atan2(dy,dx);
 	lambda = hypot(dx,dy)/2.0;
+
 	sc_th0 = mod2pi(th0-phi);
 	sc_thf = mod2pi(thf-phi);
 	sc_kmax = kmax * lambda;
@@ -237,6 +237,7 @@ void dubins_shortest_path(dubinsCurve& curve, double const& x0, double const& y0
 	double sc_th0, sc_thf, sc_kmax, lambda;
 	scaleToStandard(x0, y0, th0, xf, yf, thf, kmax, sc_th0, sc_thf, 
 					sc_kmax, lambda);
+	std::cout << sc_th0 << " ~ " << sc_thf << " ~ " << sc_kmax << " ~ " << lambda << std::endl;
 	
 	// Create typedef for recognizing pointers to function
 	typedef void (*type0)(double,double,double,bool&,double&,double&,double&);

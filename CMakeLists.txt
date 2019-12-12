@@ -38,7 +38,7 @@ add_library(dubins SHARED
 )
 
 add_library(polyclipping SHARED
-   src/clipper/clipper.cpp
+   src/clipper/cpp/clipper.cpp
 )
 
 ## Link with libraries 
