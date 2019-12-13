@@ -478,8 +478,8 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
   bool detect_blue_robot(const cv::Mat& hsv_img, const double scale, Polygon& triangle, double& x, double& y, double& theta){
 
     cv::Mat blue_mask;    
-    //cv::inRange(hsv_img, cv::Scalar(92, 80, 50), cv::Scalar(145, 255, 255), blue_mask);
     //cv::inRange(hsv_img, cv::Scalar(200, 80, 20), cv::Scalar(220, 220, 225), blue_mask);
+	//cv::inRange(hsv_img, cv::Scalar(92, 80, 50), cv::Scalar(145, 255, 255), blue_mask);
 	cv::inRange(hsv_img, cv::Scalar(100, 75, 45), cv::Scalar(145, 255, 225), blue_mask);
 
 
@@ -611,70 +611,32 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 
 	}
 
-	/* // Victim centers
-	0.718819 ~ 0.219375
-	0.96135 ~ 0.208894
-	1.22356 ~ 0.20787
-	1.25629 ~ 0.448013
-	1.44934 ~ 0.685181
-	*/
-
+	// Victim centers - OLD arena
+	
+	/*		0.718819 ~ 0.219375
+			0.96135 ~ 0.208894
+			1.22356 ~ 0.20787
+			1.25629 ~ 0.448013
+			1.44934 ~ 0.685181		*/
+	
 	// - - - DISCRETIZATION - - - 
 
 	double s = 0;
 
-	/*for (int a = 0; a <= victim_center.size(); a++){
+	for (int a = 0; a <= victim_center.size(); a++){
 
 		if (a == 0) {
-			dubins_shortest_path(newDubins, x, y, theta, victim_center[a].x, victim_center[a].y, M_PI/4, kmax);
-		} else if (a == victim_center.size()){
-			dubins_shortest_path(newDubins, path.points.back().x, path.points.back().y, path.points.back().theta, gateX, gateY, gateTh, kmax);		// If last, go to gate
+			dubins_shortest_path(newDubins, x, y, theta, victim_center[a].x, victim_center[a].y, M_PI/6, kmax);
+		} else if (a == victim_center.size()){	// If last, go to gate
+			dubins_shortest_path(newDubins, path.points.back().x, path.points.back().y, path.points.back().theta, gateX, gateY, gateTh, kmax);		
 		} else {
-			dubins_shortest_path(newDubins, path.points.back().x, path.points.back().y, path.points.back().theta, victim_center[a].x, victim_center[a].y, M_PI/4, kmax);
+			dubins_shortest_path(newDubins, path.points.back().x, path.points.back().y, path.points.back().theta, victim_center[a].x, victim_center[a].y, M_PI/6, kmax);
 		}
 
-		discretize_arc(newDubins.arc_1, npts, path);	// Arc 1
-		discretize_arc(newDubins.arc_2, npts, path);	// Arc 2
-		discretize_arc(newDubins.arc_3, npts, path);	// Arc 3
-	}*/
-
-
-	dubins_shortest_path(newDubins, x, y, theta, victim_center[0].x, victim_center[0].y, M_PI/6, kmax);
-	discretize_arc(newDubins.arc_1, s, npts, path);	// Arc 1
-	discretize_arc(newDubins.arc_2, s, npts, path);	// Arc 2
-	discretize_arc(newDubins.arc_3, s, npts, path);	// Arc 3
-
-	dubins_shortest_path(newDubins, victim_center[0].x, victim_center[0].y, M_PI/6, victim_center[1].x, victim_center[1].y, M_PI/6, kmax);
-	discretize_arc(newDubins.arc_1, s, npts, path);	// Arc 1
-	discretize_arc(newDubins.arc_2, s, npts, path);	// Arc 2
-	discretize_arc(newDubins.arc_3, s, npts, path);	// Arc 3
-
-	dubins_shortest_path(newDubins, victim_center[1].x, victim_center[1].y, M_PI/6, victim_center[2].x, victim_center[2].y, M_PI/6, kmax);
-	discretize_arc(newDubins.arc_1, s, npts, path);	// Arc 1
-	discretize_arc(newDubins.arc_2, s, npts, path);	// Arc 2
-	discretize_arc(newDubins.arc_3, s, npts, path);	// Arc 3
-
-	//dubins_shortest_path(newDubins, victim_center[2].x, victim_center[2].y, M_PI/6, victim_center[3].x, victim_center[3].y, M_PI/6, kmax);
-
-	dubins_shortest_path(newDubins, victim_center[2].x, victim_center[2].y, M_PI/6, gateX, gateY, gateTh, kmax);
-	discretize_arc(newDubins.arc_1, s, npts, path);	// Arc 1
-	discretize_arc(newDubins.arc_2, s, npts, path);	// Arc 2
-	discretize_arc(newDubins.arc_3, s, npts, path);	// Arc 3
-
-	/*dubins_shortest_path(newDubins, victim_center[3].x, victim_center[3].y, M_PI/6, victim_center[4].x, victim_center[4].y, M_PI/6, kmax);
-	discretize_arc(newDubins.arc_1, s, npts, path);	// Arc 1
-	discretize_arc(newDubins.arc_2, s, npts, path);	// Arc 2
-	discretize_arc(newDubins.arc_3, s, npts, path);	// Arc 3
-
-	dubins_shortest_path(newDubins, victim_center[4].x, victim_center[4].y, M_PI/6, victim_center[5].x, victim_center[5].y, M_PI/6, kmax);
-	discretize_arc(newDubins.arc_1, s, npts, path);	// Arc 1
-	discretize_arc(newDubins.arc_2, s, npts, path);	// Arc 2
-	discretize_arc(newDubins.arc_3, s, npts, path);	// Arc 3
-
-	dubins_shortest_path(newDubins, victim_center[5].x, victim_center[5].y, M_PI/6, gateX, gateY, gateTh, kmax);
-	discretize_arc(newDubins.arc_1, s, npts, path);	// Arc 1
-	discretize_arc(newDubins.arc_2, s, npts, path);	// Arc 2
-	discretize_arc(newDubins.arc_3, s, npts, path);	// Arc 3*/
+		discretize_arc(newDubins.arc_1, s, npts, path);	// Arc 1
+		discretize_arc(newDubins.arc_2, s, npts, path);	// Arc 2
+		discretize_arc(newDubins.arc_3, s, npts, path);	// Arc 3
+	}
 
   }    
 
