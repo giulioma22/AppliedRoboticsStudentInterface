@@ -2,6 +2,7 @@
 #define DUBINS_HPP_
 
 #include <vector>
+#include "utils.hpp"	// Path struct
 
 double sinc(double t);
 
@@ -44,6 +45,6 @@ void set_dubinsCurve(dubinsCurve& curve_ptr, double x0, double y0, double th0, d
 
 void dubins_shortest_path(dubinsCurve& curve, double const& x0, double const& y0, double const& th0, double const& xf, double const& yf, double const& thf, double const& kmax);
 
-void discretize_arc(dubinsArc& full_arc, int const& npts, std::vector<std::vector<double>>& pts);
+void discretize_arc(dubinsArc& full_arc, double& s, int& npts, Path& path);
 
 #endif

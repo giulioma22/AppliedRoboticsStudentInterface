@@ -3,6 +3,7 @@
 #include <vector>
 #include <cmath>
 #include "dubins.h"
+#include "utils.hpp"	// Path struct
 
 using namespace std;
 
@@ -90,6 +91,7 @@ void LSL(double sc_th0, double sc_thf, double sc_kmax, bool& ok, double& sc_s1, 
 	double C = cos(sc_thf) - cos(sc_th0);
 	double S = 2.0*sc_kmax + sin(sc_th0) - sin(sc_thf);
 	double temp1 = atan2(C,S);
+	sc_s1 = invK*mod2pi(temp1-sc_th0);
 	double temp2 = 2.0+4.0*pow(sc_kmax,2)-2*cos(sc_th0-sc_thf)+4*sc_kmax*(sin(sc_th0)-sin(sc_thf));
 	if (temp2 < 0){
 		ok = false;
@@ -98,7 +100,6 @@ void LSL(double sc_th0, double sc_thf, double sc_kmax, bool& ok, double& sc_s1, 
 		sc_s3 = 0;
 		return;
 	}
-	sc_s1 = invK*mod2pi(temp1-sc_th0);
 	sc_s2 = invK*sqrt(temp2);
 	sc_s3 = invK*mod2pi(sc_thf-temp1);
 	ok = true;
@@ -110,6 +111,7 @@ void RSR(double sc_th0, double sc_thf, double sc_kmax, bool& ok, double& sc_s1, 
 	double C = cos(sc_th0) - cos(sc_thf);
 	double S = 2.0*sc_kmax - sin(sc_th0) + sin(sc_thf);
 	double temp1 = atan2(C,S);
+	sc_s1 = invK*mod2pi(sc_th0-temp1);
 	double temp2 = 2.0+4.0*pow(sc_kmax,2)-2*cos(sc_th0-sc_thf)-4*sc_kmax*(sin(sc_th0)-sin(sc_thf));
 	if (temp2 < 0){
 		ok = false;
@@ -118,7 +120,6 @@ void RSR(double sc_th0, double sc_thf, double sc_kmax, bool& ok, double& sc_s1, 
 		sc_s3 = 0;
 		return;
 	}
-	sc_s1 = invK*mod2pi(sc_th0-temp1);
 	sc_s2 = invK*sqrt(temp2);
 	sc_s3 = invK*mod2pi(temp1-sc_thf);
 	ok = true;
@@ -131,6 +132,7 @@ void LSR(double sc_th0, double sc_thf, double sc_kmax, bool& ok, double& sc_s1, 
 	double S = 2.0*sc_kmax + sin(sc_th0) + sin(sc_thf);
 	double temp1 = atan2(-C,S);
 	double temp3 = 4.0*pow(sc_kmax,2)-2.0+2.0*cos(sc_th0-sc_thf)+4.0*sc_kmax*(sin(sc_th0)+sin(sc_thf));
+
 	if (temp3 < 0){
 		ok = false;
 		sc_s1 = 0;
@@ -138,11 +140,12 @@ void LSR(double sc_th0, double sc_thf, double sc_kmax, bool& ok, double& sc_s1, 
 		sc_s3 = 0;
 		return;
 	}
+	sc_s2 = invK*sqrt(temp3);
 	double temp2 = -atan2(-2.0,sc_s2*sc_kmax);
 	sc_s1 = invK*mod2pi(temp1+temp2-sc_th0);
-	sc_s2 = invK*sqrt(temp3);
 	sc_s3 = invK*mod2pi(temp1+temp2-sc_thf);
 	ok = true;
+
 }
 
 // RSL
@@ -159,9 +162,9 @@ void RSL(double sc_th0, double sc_thf, double sc_kmax, bool& ok, double& sc_s1, 
 		sc_s3 = 0;
 		return;
 	}
+	sc_s2 = invK*sqrt(temp3);
 	double temp2 = atan2(2.0,sc_s2*sc_kmax);
 	sc_s1 = invK*mod2pi(sc_th0-temp1+temp2);
-	sc_s2 = invK*sqrt(temp3);
 	sc_s3 = invK*mod2pi(sc_thf-temp1+temp2);
 	ok = true;
 }
@@ -180,8 +183,8 @@ void RLR(double sc_th0, double sc_thf, double sc_kmax, bool& ok, double& sc_s1, 
 		sc_s3 = 0;
 		return;
 	}
-	sc_s1 = invK*mod2pi(sc_th0-temp1+0.5*sc_s2*sc_kmax);
 	sc_s2 = invK*mod2pi(2.0*M_PI-acos(temp2));
+	sc_s1 = invK*mod2pi(sc_th0-temp1+0.5*sc_s2*sc_kmax);
 	sc_s3 = invK*mod2pi(sc_th0-sc_thf+sc_kmax*(sc_s2-sc_s1));
 	ok = true;
 }
@@ -200,8 +203,8 @@ void LRL(double sc_th0, double sc_thf, double sc_kmax, bool& ok, double& sc_s1, 
 		sc_s3 = 0;
 		return;
 	}
-	sc_s1 = invK*mod2pi(temp1-sc_th0+0.5*sc_s2*sc_kmax);
 	sc_s2 = invK*mod2pi(2*M_PI-acos(temp2));
+	sc_s1 = invK*mod2pi(temp1-sc_th0+0.5*sc_s2*sc_kmax);
 	sc_s3 = invK*mod2pi(sc_thf-sc_th0+sc_kmax*(sc_s2-sc_s1));
 	ok = true;
 }
@@ -217,7 +220,7 @@ void set_dubinsArc(dubinsArc& ptr, double x0, double y0, double th0, double k, d
 	ptr.xf = x0 + s * sinc(k*s/2.0) * cos(th0+k*s/2.0);
 	ptr.yf = y0 + s * sinc(k*s/2.0) * sin(th0+k*s/2.0);
 	ptr.thf = mod2pi(th0+k*s);
-	//std::cout << ptr.x0 << " ~ " << ptr.y0 << " ~ " << ptr.th0 << " ~ " << ptr.k << " ~ " << ptr.s << " ~ " << ptr.xf << std::endl;
+
 }
 
 // Set a structure representing a Dubins curve (composed by 3 arcs)
@@ -237,7 +240,6 @@ void dubins_shortest_path(dubinsCurve& curve, double const& x0, double const& y0
 	double sc_th0, sc_thf, sc_kmax, lambda;
 	scaleToStandard(x0, y0, th0, xf, yf, thf, kmax, sc_th0, sc_thf, 
 					sc_kmax, lambda);
-	std::cout << sc_th0 << " ~ " << sc_thf << " ~ " << sc_kmax << " ~ " << lambda << std::endl;
 	
 	// Create typedef for recognizing pointers to function
 	typedef void (*type0)(double,double,double,bool&,double&,double&,double&);
@@ -262,6 +264,7 @@ void dubins_shortest_path(dubinsCurve& curve, double const& x0, double const& y0
 
 	for (int i = 0; i < 6; i++){
 		primitives[i](sc_th0, sc_thf, sc_kmax, ok, sc_s1_c, sc_s2_c, sc_s3_c);
+
 		Lcur = sc_s1_c + sc_s2_c + sc_s3_c;
 		if (ok and Lcur < L){
 			L = Lcur;
@@ -275,31 +278,27 @@ void dubins_shortest_path(dubinsCurve& curve, double const& x0, double const& y0
 	if (pidx >= 0){
 		// Transform problem to standard form
 		scaleFromStandard(lambda, sc_s1, sc_s2, sc_s3, s1, s2, s3);
-		// Construct Dubins curve
-		
-		//std::cout << s1 << " ~ " << s2 << " ~ " << s3 << " ~ " << ksigns[pidx][0]*kmax << " ~ " << ksigns[pidx][1]*kmax << " ~ " << ksigns[pidx][2]*kmax << std::endl;
-		
+
+		// Construct Dubins curve		
 		set_dubinsCurve(curve, x0, y0, th0, s1, s2, s3, ksigns[pidx][0]*kmax, ksigns[pidx][1]*kmax, ksigns[pidx][2]*kmax);
 	}
 
 }
 
 // Discretize every arc to smaller arcs for the robot to follow
-void discretize_arc(dubinsArc& full_arc, int const& npts, std::vector<std::vector<double>>& pts){
+
+void discretize_arc(dubinsArc& full_arc, double& s, int& npts, Path& path){
 
 	for (int i = 0; i <= npts; i++){
 		dubinsArc small_arc;
-		double s = full_arc.s/npts*i;
-		set_dubinsArc(small_arc, full_arc.x0, full_arc.y0, full_arc.th0, full_arc.k, s);
+		double s_local = full_arc.s/npts*i;
+		set_dubinsArc(small_arc, full_arc.x0, full_arc.y0, full_arc.th0, full_arc.k, s_local);
 
-		pts.push_back({s, small_arc.xf, small_arc.yf, small_arc.thf, small_arc.k});
+		path.points.emplace_back(s_local, small_arc.xf, small_arc.yf, small_arc.thf, small_arc.k);
+
+		s += full_arc.s/npts;
 
 	}
+
 }
-
-
-
-
-
-
 
