@@ -283,7 +283,8 @@ static bool state = false;
 
     cv::Mat green_mask_gate;    
     //cv::inRange(hsv_img, cv::Scalar(50, 80, 34), cv::Scalar(75, 255, 255), green_mask_gate);
-    cv::inRange(hsv_img, cv::Scalar(13, 68, 41), cv::Scalar(86, 255, 80), green_mask_gate);
+    //cv::inRange(hsv_img, cv::Scalar(13, 68, 41), cv::Scalar(86, 255, 80), green_mask_gate);
+	cv::inRange(hsv_img, cv::Scalar(15, 65, 40), cv::Scalar(85, 255, 95), green_mask_gate);
     
     // Find green regions - GATE
     std::vector<std::vector<cv::Point>> contours, contours_approx;
@@ -347,7 +348,8 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
     
     // store a binary image in green_mask where the white pixel are those contained in HSV rage (x,x,x) --> (y,y,y)
     //cv::inRange(hsv_img, cv::Scalar(50, 80, 34), cv::Scalar(75, 255, 255), green_mask_victims); //Simulator
-    cv::inRange(hsv_img, cv::Scalar(13, 68, 41), cv::Scalar(86, 255, 80), green_mask_victims);
+    //cv::inRange(hsv_img, cv::Scalar(13, 68, 41), cv::Scalar(86, 255, 80), green_mask_victims);
+	cv::inRange(hsv_img, cv::Scalar(15, 65, 40), cv::Scalar(85, 255, 95), green_mask_victims);
 
     // Apply some filtering
     // Create the kernel of the filter i.e. a rectanble with dimension 3x3
@@ -477,7 +479,9 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 
     cv::Mat blue_mask;    
     //cv::inRange(hsv_img, cv::Scalar(92, 80, 50), cv::Scalar(145, 255, 255), blue_mask);
-    cv::inRange(hsv_img, cv::Scalar(96, 92, 55), cv::Scalar(145, 255, 255), blue_mask);
+    //cv::inRange(hsv_img, cv::Scalar(200, 80, 20), cv::Scalar(220, 220, 225), blue_mask);
+	cv::inRange(hsv_img, cv::Scalar(100, 75, 45), cv::Scalar(145, 255, 225), blue_mask);
+
 
     // Process blue mask
     std::vector<std::vector<cv::Point>> contours, contours_approx;
