@@ -16,6 +16,7 @@
 
 namespace student {
 
+// To sort victim_list by 1st elem of pair (int)
 bool sort_pair(const std::pair<int,Polygon>& a, const std::pair<int,Polygon>& b){
 	return (a.first < b.first);
 }
@@ -573,6 +574,8 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 
 	int kmax = 10;		// Max angle of curvature
 	int npts = 100;		// Standard discretization unit of arcs 
+		
+	std::vector<Point> rawPath;	// Non-discretized path
 	dubinsCurve newDubins;
 
 	// - - - GATE CENTER - - -
@@ -585,9 +588,9 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 	double dist_1 = sqrt(pow(gate[0].x-gate[1].x,2.0)+pow(gate[0].y-gate[1].y,2.0));
 	double dist_2 = sqrt(pow(gate[1].x-gate[2].x,2.0)+pow(gate[1].y-gate[2].y,2.0));
 	if (dist_1 < dist_2){
-		gateTh = acos(abs(gate[0].x-gate[1].x) / dist_1);
+		gateTh = acos(fabs(gate[0].x-gate[1].x) / dist_1);
 	} else {
-		gateTh = acos(abs(gate[1].x-gate[2].x) / dist_1);
+		gateTh = acos(fabs(gate[1].x-gate[2].x) / dist_1);
 	}
 
 	//  - - - VICTIM CENTER - - -
@@ -618,25 +621,89 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 			1.22356 ~ 0.20787
 			1.25629 ~ 0.448013
 			1.44934 ~ 0.685181		*/
-	
+
+	// Victim centers - NEW arena #2
+
+	/*		0.457763 ~ 0.329063
+			0.797063 ~ 0.215231
+			0.970856 ~ 0.45825
+			1.33648 ~ 0.391219
+			1.32356 ~ 0.705169
+			1.32893 ~ 0.999863 (GATE)		*/
+
+
+	// - - - FILL RAWPATH - - -
+
+	// - - - RRT* GOES HERE - - - 
+
+
+
+	// - - - - - - - - - - - - - - -		
+
+	rawPath.push_back(Point(x,y));
+	for (int i = 0; i < victim_center.size(); i++){
+		rawPath.push_back(victim_center[i]);
+	}
+	rawPath.push_back(Point(gateX, gateY));
+
 	// - - - DISCRETIZATION - - - 
 
-	double s = 0;
+	double s, curr_theta, next_theta;
 
-	for (int a = 0; a <= victim_center.size(); a++){
-
-		if (a == 0) {
-			dubins_shortest_path(newDubins, x, y, theta, victim_center[a].x, victim_center[a].y, M_PI/6, kmax);
-		} else if (a == victim_center.size()){	// If last, go to gate
-			dubins_shortest_path(newDubins, path.points.back().x, path.points.back().y, path.points.back().theta, gateX, gateY, gateTh, kmax);		
+	/*for (int a = 0; a < rawPath.size(); a++){
+	
+		if (a == 0){
+			next_theta = orientation(Point(x, y), rawPath[a], rawPath[a+1])/2.0;
+			if (next_theta < 0){
+				next_theta += M_PI/2;
+			} else {
+				next_theta -= M_PI/2;
+			}
+			dubins_shortest_path(newDubins, x, y, theta, rawPath[a].x, rawPath[a].y, next_theta, kmax);
+		} else if (a == rawPath.size()-1){	// If last, go to gate
+			next_theta = gateTh;
+			dubins_shortest_path(newDubins, path.points.back().x, path.points.back().y, path.points.back().theta, rawPath[a].x, rawPath[a].y, next_theta, kmax);
 		} else {
-			dubins_shortest_path(newDubins, path.points.back().x, path.points.back().y, path.points.back().theta, victim_center[a].x, victim_center[a].y, M_PI/6, kmax);
+			next_theta = orientation(Point(path.points.back().x, path.points.back().y), rawPath[a], rawPath[a+1])/2.0;
+			if (next_theta < 0){
+				next_theta += M_PI/2;
+			} else {
+				next_theta -= M_PI/2;
+			}
+			dubins_shortest_path(newDubins, path.points.back().x, path.points.back().y, path.points.back().theta, rawPath[a].x, rawPath[a].y, next_theta, kmax);
 		}
 
 		discretize_arc(newDubins.arc_1, s, npts, path);	// Arc 1
 		discretize_arc(newDubins.arc_2, s, npts, path);	// Arc 2
 		discretize_arc(newDubins.arc_3, s, npts, path);	// Arc 3
+	}*/
+
+	for (int a = 0; a < rawPath.size()-1; a++){
+	
+		// Compute current and next angle
+		if (a == rawPath.size()-2){	// If last, go to gate
+			curr_theta = next_theta;
+			next_theta = gateTh;
+		} else {
+			if (a == 0){
+				curr_theta = theta;
+			} else {
+				curr_theta = next_theta;
+			}
+
+			// Same angle as current point w/ point 2 steps ahead
+			next_theta = acos(fabs(rawPath[a].x-rawPath[a+2].x) / (sqrt(pow(rawPath[a].x-rawPath[a+2].x,2.0)+pow(rawPath[a].y-rawPath[a+2].y,2.0))));
+		}
+		
+		// Find best path to next point
+		dubins_shortest_path(newDubins, rawPath[a].x, rawPath[a].y, curr_theta, rawPath[a+1].x, rawPath[a+1].y, next_theta, kmax);		
+
+		// Dicretize the 3 arcs
+		discretize_arc(newDubins.arc_1, s, npts, path);	// Arc 1
+		discretize_arc(newDubins.arc_2, s, npts, path);	// Arc 2
+		discretize_arc(newDubins.arc_3, s, npts, path);	// Arc 3
 	}
+
 
   }    
 
