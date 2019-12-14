@@ -21,6 +21,18 @@ bool sort_pair(const std::pair<int,Polygon>& a, const std::pair<int,Polygon>& b)
 	return (a.first < b.first);
 }
 
+double orientation(Point a, Point b, Point c){
+
+	Point ab, cb; 
+	ab.x = b.x-a.x; ab.y = b.y-a.y;
+	cb.x = b.x-c.x; cb.y = b.y-c.y;
+
+	double dot = ab.x*cb.x + ab.y*cb.y;
+	double cross = ab.x*cb.y - ab.y*cb.x;
+
+	return atan2(cross, dot);
+}
+
 void loadImage(cv::Mat& img_out, const std::string& config_folder){  
   static bool initialized = false;
   static std::vector<cv::String> img_list; // list of images to load
@@ -692,7 +704,11 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 			}
 
 			// Same angle as current point w/ point 2 steps ahead
-			next_theta = acos(fabs(rawPath[a].x-rawPath[a+2].x) / (sqrt(pow(rawPath[a].x-rawPath[a+2].x,2.0)+pow(rawPath[a].y-rawPath[a+2].y,2.0))));
+			if (rawPath[a].y-rawPath[a+2].y < 0){
+				next_theta = acos(fabs(rawPath[a].x-rawPath[a+2].x) / (sqrt(pow(rawPath[a].x-rawPath[a+2].x,2.0)+pow(rawPath[a].y-rawPath[a+2].y,2.0))));
+			} else {
+				next_theta = -acos(fabs(rawPath[a].x-rawPath[a+2].x) / (sqrt(pow(rawPath[a].x-rawPath[a+2].x,2.0)+pow(rawPath[a].y-rawPath[a+2].y,2.0))));			
+			}
 		}
 		
 		// Find best path to next point
