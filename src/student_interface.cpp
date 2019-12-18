@@ -8,6 +8,7 @@
 #include <atomic>
 #include <unistd.h>
 #include <algorithm>
+#include <math.h>
 
 #include <experimental/filesystem>
 
@@ -548,6 +549,9 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
       double dx = cx-vertex.x;
       double dy = cy-vertex.y;
 
+      /*double dist = sqrt(pow((dx),2)+pow((dy),2));
+      std::cout << "PERFECT dist: " << dist << std::endl;*/
+
       // Robot position
       x = cx;
       y = cy;
@@ -580,10 +584,268 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
     return detect_blue_robot(hsv_img, scale, triangle, x, y, theta);    
   }
 
+struct path_pos{
+		double x;
+		double y;
+		double theta;
+		int pathIndex;
+		path_pos *q_parent = nullptr;
+		Path path;
+	};
+
   bool planPath(const Polygon& borders, const std::vector<Polygon>& obstacle_list, const std::vector<std::pair<int,Polygon>>& victim_list, const Polygon& gate, const float x, const float y, const float theta, Path& path, const std::string& config_folder){
+	
+	//List of q
+	std::vector<path_pos> list_q;
+	
+	std::vector<std::vector<int>> obst_World(borders[1].x*1000, std::vector<int>(borders[3].y*1000, 0));
+	int kmax = 10;		// Max angle of curvature
+	int npts = 10;	// Standard discretization unit of arcs
+	double s; 
+		
+	std::vector<Point> rawPath;	// Non-discretized path
+	dubinsCurve newDubins;
+
+	// - - - GATE CENTER - - -
+	double gateX = (gate[0].x + gate[1].x + gate[2].x + gate[3].x)/4;
+	double gateY = (gate[0].y + gate[1].y + gate[2].y + gate[3].y)/4;
+
+	// Compute gate orientation
+	double gateTh;
+	double dist_1 = sqrt(pow(gate[0].x-gate[1].x,2.0)+pow(gate[0].y-gate[1].y,2.0));
+	double dist_2 = sqrt(pow(gate[1].x-gate[2].x,2.0)+pow(gate[1].y-gate[2].y,2.0));
+
+	if (dist_1 < dist_2){
+		gateTh = acos(fabs(gate[0].x-gate[1].x) / dist_1);
+	} else {
+		gateTh = acos(fabs(gate[1].x-gate[2].x) / dist_1);
+	}
+
+	//  - - - VICTIM CENTER - - -
+	std::vector<Point> victim_center;
+	double victim_X;
+	double victim_Y;
+
+	for (int i = 0; i < victim_list.size(); i++){
+		victim_X = 0;
+		victim_Y = 0;
+		Polygon currentPoly = std::get<1>(victim_list[i]);
+		for (int pt = 0; pt < currentPoly.size(); pt++){
+			victim_X += currentPoly[pt].x;
+			victim_Y += currentPoly[pt].y;
+		}
+		victim_X /= currentPoly.size();
+		victim_Y /= currentPoly.size();
+		victim_center.emplace_back(victim_X, victim_Y);
+	}
+
+	//  - - - OBSTACLE WORLD - - -
+	std::vector<double> obs_radius;
+	std::vector<Point> obs_center;
+	double obs_X;
+	double obs_Y;
+
+	//Center
+	for (int i = 0; i < obstacle_list.size(); i++){
+		obs_X = 0;
+		obs_Y = 0;
+		Polygon currentPoly = obstacle_list[i];
+		for (int pt = 0; pt < currentPoly.size(); pt++){
+			obs_X += currentPoly[pt].x;
+			obs_Y += currentPoly[pt].y;	
+		}
+		obs_X /= currentPoly.size();
+		obs_Y /= currentPoly.size();
+		obs_center.emplace_back(obs_X, obs_Y);
+	}
+	//Radius
+	for (int i = 0; i < obstacle_list.size(); i++){
+		double maxDist = 0.0;
+		Polygon currentPoly = obstacle_list[i];
+		for (int pt = 0; pt < currentPoly.size(); pt++){
+			double dist = sqrt(pow((currentPoly[pt].x-currentPoly[(pt+1) % currentPoly.size()].x),2)+pow((currentPoly[pt].y-currentPoly[(pt+1) % currentPoly.size()].y),2));
+			if(dist > maxDist){
+				maxDist = dist;
+			}	
+		}
+		obs_radius.emplace_back(maxDist / 2.0);
+	}
+
+	// - - - FILL RAWPATH - - -
+	rawPath.push_back(Point(x,y));
+
+	for (int i = 0; i < victim_center.size(); i++){
+		rawPath.push_back(victim_center[i]);
+	}
+	rawPath.push_back(Point(gateX, gateY));
+	// - - - RRT* GOES HERE - - - 
+
+	srand(time(NULL));
+	int MAX_X = (borders[1].x*100);
+	int MIN_X = (borders[0].x*100);
+	int MAX_Y = (borders[3].y*100);
+	int MIN_Y = (borders[0].y*100);
+	int samp_X = 0;
+	int samp_Y = 0;
+	double q_rand_x = 0;
+	double q_rand_y = 0;
+	int rand_count = 0;
+	
+	//Node tree with paths
+	path_pos q_near;
+	
+	std::vector<Pose> POINTS;
+	int goal = 1;
+	while(goal < rawPath.size()){
+		list_q.clear();
+
+		//Initialize with car position (x,y,theta)
+		if(goal == 1){
+			q_near.x = x;
+			q_near.y = y;
+			q_near.theta = theta;
+			
+		}
+		else{
+			std::cout << "RESSSTARTTING" << path.points.size() << std::endl;
+			Pose p = path.points.back();
+			q_near.x = p.x;
+			q_near.y = p.y;
+			q_near.theta = p.theta;
+			
+		}
+	
+		//RRT Line 1
+		list_q.push_back(q_near);
+	
+		//RRT Line 2
+		bool goalReached = false;
+		while(goalReached == false){
+			bool rand_clear = false;
+			double ANGLE = 0.0;
+			int index;
+			double min_dist;
+			//RRT Line 3 & 4
+			while(!rand_clear){
+				min_dist = 100;
+				index = 0;
+				samp_X = rand()%(MAX_X-MIN_X+1)+MIN_X;
+				samp_Y = rand()%(MAX_Y-MIN_Y+1)+MIN_Y;
+				ANGLE = double((M_PI + (((rand() % 180) - 90) * M_PI) / 90.0)); //double( rand() % int(M_PI * 200)) / 100.0;
+				q_rand_x = samp_X/100.00;
+				q_rand_y = samp_Y/100.00;
+				rand_count = rand_count +1;
+
+				if (rand_count % 10 == 0){
+					q_rand_x =  rawPath[goal].x;//gateX;
+					q_rand_y =  rawPath[goal].y;//gateY;
+				}
+	
+				//RRT Line 5 Calculate distance between q_rand and q_near
+		
+		
+				for(int i=0; i<list_q.size(); i++){
+					double dist_points = sqrt(pow((q_rand_x-list_q.at(i).x),2)+pow((q_rand_y-list_q.at(i).y),2));
+					if(dist_points < min_dist){
+						min_dist = dist_points;
+						index = i;
+					}
+				}
+				//RRT Line 4
+				if((min_dist > 0.2 and min_dist < 0.6) or rand_count % 10 == 0){
+					rand_clear = true;
+					
+				}
+			}
+
+			//RRT Line 6
+			Path* newPath = new Path;
+			dubinsCurve dubins = {};
 
 
+			dubins_shortest_path(dubins, list_q.at(index).x, list_q.at(index).y, list_q.at(index).theta, q_rand_x, q_rand_y, ANGLE, kmax);	
+			
+			// Dicretize the 3 arcs
+			discretize_arc(dubins.arc_1, s, npts, *newPath);	// Arc 1
+			discretize_arc(dubins.arc_2, s, npts, *newPath);	// Arc 2
+			discretize_arc(dubins.arc_3, s, npts, *newPath);	// Arc 3
+			
+	
+			//RRT Line 7 Collision Check
+			// Find closests obstacle to the point in the curve
+			bool collision = false;
+			for(int j=0; j<newPath->points.size(); j++){
+				int obs_index = 0;
+				double obs_min_dist = 100;
+				for(int i=0; i<obs_center.size(); i++){
+					double dist_to_obs = sqrt(pow((newPath->points.at(j).x-obs_center.at(i).x),2)+pow((newPath->points.at(j).y-obs_center.at(i).y),2));
+					if(dist_to_obs < obs_min_dist){
+						obs_min_dist = dist_to_obs;
+						obs_index = i;
+					}
+				}
 
+				if(obs_min_dist < (obs_radius.at(obs_index)+0.05) or newPath->points.at(j).x < borders[0].x  or newPath->points.at(j).x > borders[1].x  or newPath->points.at(j).y < borders[0].y  or newPath->points.at(j).y > borders[3].y ){
+					collision = true;
+					
+					break;	
+				}
+			}
+
+	
+			if(!collision){
+		
+				std::cout << "NonColl " << std::endl;
+				
+
+				path_pos q_new;
+				q_new.x = newPath->points.back().x;
+				q_new.y = newPath->points.back().y;
+				std::cout << "Reached: q_new_x " << q_new.x << "q_new_y " << q_new.y  << "Adding path " << newPath->points.size() << "Parent is " << index<< std::endl;
+				//exit(0);
+				q_new.path.setPoints(newPath->points);
+				q_new.theta = newPath->points.back().theta;
+				q_new.pathIndex = list_q.size();
+				//RRT Line 8
+				q_new.q_parent = &list_q.at(index);
+				list_q.push_back(q_new);
+
+				//RRT Line 
+		
+				if(sqrt(pow((q_new.x - rawPath.at(goal).x),2)+pow((q_new.y - rawPath.at(goal).y),2)) < 0.01){
+					std::cout << "q_new_x " << q_new.x << " goalCetnerX " << rawPath.at(goal).x << " q_new_y " << q_new.y << " goalCetnery " << rawPath.at(goal).y<< std::endl;
+					goal = goal+1;
+					goalReached = true;
+					std::cout << "Goal " << goal << "reached." << std::endl;
+				}
+			}
+		
+			if(goal == 6){	
+					std::cout << "Reached: "<< goal << std::endl;
+					goal = goal + 10;	
+			}
+			if(goalReached){
+	    		POINTS.clear();
+	    		for(auto p : list_q){
+	    			std::cout << p.x << " " << p.y << " " << p.theta << " size " << p.path.size() << std::endl;
+	    			}
+	    		path_pos pos = list_q.back();
+	    		std::cout <<"SizeOfQ_list " << list_q.size() << " " << pos.x << " " << pos.y << " "<< pos.theta << " Goal2 :   " << rawPath.at(2).x << " " << rawPath.at(2).y << std::endl;
+	    
+	    		while(pos.q_parent != nullptr){
+	    			
+	    			POINTS.insert(POINTS.begin(),list_q.at(pos.pathIndex).path.points.begin(),list_q.at(pos.pathIndex).path.points.end());
+	    			
+	    			std::cout << "My parent is in x" << pos.q_parent->x << " " << pos.q_parent->y << ", Size of path: " << pos.q_parent->path.points.size() << std::endl;
+	    			pos = *pos.q_parent;
+	    		}
+			}
+			
+		}
+	
+		path.points.insert(path.points.end(),POINTS.begin(), POINTS.end());
+		}
+	/*
 	int kmax = 10;		// Max angle of curvature
 	int npts = 100;		// Standard discretization unit of arcs 
 		
@@ -652,15 +914,15 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 
 	// - - - - - - - - - - - - - - -		
 
-	rawPath.push_back(Point(x,y));
+	/*rawPath.push_back(Point(x,y));
 	for (int i = 0; i < victim_center.size(); i++){
 		rawPath.push_back(victim_center[i]);
 	}
-	rawPath.push_back(Point(gateX, gateY));
+	rawPath.push_back(Point(gateX, gateY));*/
 
 	// - - - DISCRETIZATION - - - 
 
-	double s, curr_theta, next_theta;
+	//double s, curr_theta, next_theta;
 
 	/*for (int a = 0; a < rawPath.size(); a++){
 	
@@ -684,13 +946,12 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 			}
 			dubins_shortest_path(newDubins, path.points.back().x, path.points.back().y, path.points.back().theta, rawPath[a].x, rawPath[a].y, next_theta, kmax);
 		}
-
 		discretize_arc(newDubins.arc_1, s, npts, path);	// Arc 1
 		discretize_arc(newDubins.arc_2, s, npts, path);	// Arc 2
 		discretize_arc(newDubins.arc_3, s, npts, path);	// Arc 3
 	}*/
 
-	for (int a = 0; a < rawPath.size()-1; a++){
+	/*for (int a = 0; a < rawPath.size()-1; a++){
 	
 		// Compute current and next angle
 		if (a == rawPath.size()-2){	// If last, go to gate
@@ -718,10 +979,8 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		discretize_arc(newDubins.arc_1, s, npts, path);	// Arc 1
 		discretize_arc(newDubins.arc_2, s, npts, path);	// Arc 2
 		discretize_arc(newDubins.arc_3, s, npts, path);	// Arc 3
+	}*/
 	}
-
-
-  }    
-
+	// - - - - - - - - - - - - - - -		
 }
 
