@@ -271,7 +271,7 @@ static bool state = false;
  
         co.AddPath(srcPoly, ClipperLib::jtSquare, ClipperLib::etClosedPolygon);
  
-        co.Execute(newPoly, 30);    // Int is obstacle inflation idx
+        co.Execute(newPoly, 40);    // Int is obstacle inflation idx
  
         for (const ClipperLib::Path &path: newPoly){
             // Obstacle obst = create data structure for current obstacle...
@@ -691,7 +691,6 @@ int insidePolygon(Polygon obstacle, Point pt){
         }
         obs_X /= currentPoly.size();
         obs_Y /= currentPoly.size();
-        std::cout << "Poly"<< i << "x " << obs_X << "y " << obs_Y <<std::endl;
         obs_center.emplace_back(obs_X, obs_Y);
     }
     //Radius
@@ -747,7 +746,7 @@ int insidePolygon(Polygon obstacle, Point pt){
         if(goal == 1){
             q_near.x = x;
             q_near.y = y;
-            q_near.theta = 0;//theta;
+            q_near.theta = theta; //0;
            
         }
 	//If it is not goal = 1, we want to take the last position in Path
