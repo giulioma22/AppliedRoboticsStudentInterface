@@ -20,7 +20,7 @@ namespace student {
 
 bool mission_2 = true;
 
-void RRT(const float theta, Path& path, std::vector<Point>& rawPath, const Polygon& borders, int kmax, int npts, const std::vector<Polygon>& obstacle_list, std::vector<double> obs_radius, std::vector<Point> obs_center, double length_path);
+void RRT(const float theta, Path& path, std::vector<Point>& rawPath, const Polygon& borders, int kmax, int npts, const std::vector<Polygon>& obstacle_list, std::vector<double> obs_radius, std::vector<Point> obs_center, double& length_path);
  
 // To sort victim_list by 1st elem of pair (int)
 bool sort_pair(const std::pair<int,Polygon>& a, const std::pair<int,Polygon>& b){
@@ -589,10 +589,11 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
     // RGB to HSV to then detect blue of robot more easily
     return detect_blue_robot(hsv_img, scale, triangle, x, y, theta);    
   }
-/* Struct path_pos
-x, y, theta for POSE
-pathIndex, parentIndex to find the path/parent in the corresponding lists*/
-struct path_pos{
+
+  /* Struct path_pos
+  x, y, theta for POSE
+  pathIndex, parentIndex to find the path/parent in the corresponding lists*/
+  struct path_pos{
         double x;
         double y;
         double theta;
@@ -600,8 +601,9 @@ struct path_pos{
         int parentIndex;
         //path_pos q_parent;
     };
-//Check if the point is in the polygon
-int insidePolygon(Polygon obstacle, Point pt){
+
+  //Check if the point is in the polygon
+  int insidePolygon(Polygon obstacle, Point pt){
     int counter = 0;
     double xinters;
     int N = obstacle.size();
@@ -725,21 +727,27 @@ int insidePolygon(Polygon obstacle, Point pt){
 
 		// - - - RRT HERE - - -
 
-		RRT(theta, path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, 0);
+		double length_path = 0;
+
+		RRT(theta, path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, length_path);
 
 	} else {
 		std::cout << "Mission 2" << std::endl;
 
-		double costmap[victim_center.size()+1][victim_center.size()+1] = {};
+		// Initialize costmap matrix
+		std::vector<std::vector<double>> costmap(victim_center.size()+1, std::vector<double>(victim_center.size()+1));
 
 		// Calculate connections COSTMAP
+
+		int cnt = 1;
 
 		for (int i = 0; i < victim_center.size()+1; i++){			
 			for (int j = 0; j < victim_center.size()+1-i; j++){
 
-				//std::cout << i << " ~ " << j << std::endl;
+				std::cout << "Combination: " << cnt << std::endl;
+				cnt++;
 
-				/*// First point
+				// First point
 				if (i == 0){
 					rawPath.push_back(Point(x, y));			
 				} else {
@@ -751,16 +759,13 @@ int insidePolygon(Polygon obstacle, Point pt){
 					rawPath.push_back(Point(gateX, gateY));
 				} else {
 					rawPath.push_back(victim_center[i+j]);
-				}*/
+				}
 
-				rawPath.push_back(Point(x, y));
-				rawPath.push_back(victim_center[j+i]);
-
-				double length_path;				
+				double length_path = 0;				
 
 				RRT(theta, path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, length_path);
 
-				//costmap[i][j] = length_path;
+				costmap[i][i+j] = length_path;
 
 				path = {};
 				rawPath.clear();
@@ -768,11 +773,18 @@ int insidePolygon(Polygon obstacle, Point pt){
 			}	// End 2nd loop
 		}	// End 1st loop
 
+	for (int i = 0; i < costmap.size(); i++){
+		for (int j = 0; j < costmap.size(); j++){
+			std::cout << costmap[i][j] << " ";
+		}
+		std::cout << std::endl;
+	}
+
 	}	// End mission 2
        
 }
 
-void RRT(const float theta, Path& path, std::vector<Point>& rawPath, const Polygon& borders, int kmax, int npts, const std::vector<Polygon>& obstacle_list, std::vector<double> obs_radius, std::vector<Point> obs_center, double length_path){
+  void RRT(const float theta, Path& path, std::vector<Point>& rawPath, const Polygon& borders, int kmax, int npts, const std::vector<Polygon>& obstacle_list, std::vector<double> obs_radius, std::vector<Point> obs_center, double& length_path){
 
 	//List of all current nodes
 	std::vector<path_pos> nodes_list;
@@ -792,7 +804,7 @@ void RRT(const float theta, Path& path, std::vector<Point>& rawPath, const Polyg
 	double q_rand_y = 0;
 	int rand_count = 1;
 
-	path_pos first_node; //First node in the tree
+	path_pos first_node = {}; //First node in the tree
 
 	std::vector<Pose> temp_path; //Temporary path from point to point
 
@@ -822,17 +834,21 @@ void RRT(const float theta, Path& path, std::vector<Point>& rawPath, const Polyg
 		    first_node.theta = p.theta;
 		}
 
-		//RRT Line 1
+		//RRT Line 1 - List of nodes and paths
 		Path p;
 		nodes_list.push_back(first_node);
 		paths_list.push_back(p); //Adding empty path for indexing purposes
 
-		//RRT Line 2
+		//RRT Line 2 - Reach each major point (rawPath)
 		bool goalReached = false;
+
 		while(goalReached == false){
 		   
 		    //Reset if not found for too long
-		    if(nodes_list.size() > 6){
+		    if(nodes_list.size() > 10){
+
+				std::cout << "Reinitializing lists" << std::endl;
+
 		        path_pos l = nodes_list.at(0); //We clear the lists but we keep the initial qnear
 		        Path lp = paths_list.at(0); //We clear the lists but we keep the initial empty path for indexing purposes
 		        nodes_list.clear();
@@ -926,7 +942,7 @@ void RRT(const float theta, Path& path, std::vector<Point>& rawPath, const Polyg
 		        
 		        failed_to_reach_goal = false;
 	
-		        path_pos new_node;
+		        path_pos new_node = {};
 		        new_node.x = newPath.points.back().x;
 		        new_node.y = newPath.points.back().y;
 		        
@@ -965,9 +981,19 @@ void RRT(const float theta, Path& path, std::vector<Point>& rawPath, const Polyg
 		}
 
 		// Add points to final path
-		path.points.insert(path.points.end(),temp_path.begin(), temp_path.end());
+		path.points.insert(path.points.end(), temp_path.begin(), temp_path.end());
 		temp_path.clear();
 		temp_path.shrink_to_fit();
+
+		for (int i = 0; i < path.points.size()-1; i++){
+			length_path += sqrt(pow(path.points[i].x-path.points[i+1].x,2) + pow(path.points[i].y-path.points[i+1].y,2));
 		}
+
 	}
+
+  }
+
 }
+
+
+
