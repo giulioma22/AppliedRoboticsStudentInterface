@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <algorithm>
 #include <math.h>
+#include <chrono>
  
 #include <experimental/filesystem>
  
@@ -16,6 +17,10 @@
 #include "clipper/cpp/clipper.hpp"
  
 namespace student {
+
+bool mission_2 = true;
+
+void RRT(const float theta, Path& path, std::vector<Point>& rawPath, const Polygon& borders, int kmax, int npts, const std::vector<Polygon>& obstacle_list, std::vector<double> obs_radius, std::vector<Point> obs_center, double length_path);
  
 // To sort victim_list by 1st elem of pair (int)
 bool sort_pair(const std::pair<int,Polygon>& a, const std::pair<int,Polygon>& b){
@@ -366,7 +371,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
     cv::inRange(hsv_img, cv::Scalar(15, 65, 40), cv::Scalar(85, 255, 95), green_mask_victims);
  
     // Apply some filtering
-    // Create the kernel of the filter i.e. a rectanble with dimension 3x3
+    // Create the kernel of the filter i.e. a rectangle with dimension 3x3
     cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size((1*2) + 1, (1*2)+1));
     // Dilate using the generated kernel
     cv::dilate(green_mask_victims, green_mask_victims, kernel);
@@ -385,11 +390,12 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
     // create an array of rectangle (i.e. bounding box containing the green area contour)  
     std::vector<cv::Rect> boundRect(contours.size());
     int victim_id = 0;
+
     for (int i=0; i<contours.size(); ++i){
       double area = cv::contourArea(contours[i]);
       if (area < MIN_AREA_SIZE) continue; // filter too small contours to remove false positives
- 
-      std::vector<cv::Point> approx_curve;/////////////////////////////////////////
+
+      std::vector<cv::Point> approx_curve;
       approxPolyDP(contours[i], approx_curve, 10, true);
       if(approx_curve.size() < 6) continue; //fitler out the gate
      
@@ -485,8 +491,8 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
  
     sort(victim_list.begin(), victim_list.end(), sort_pair);
  
-    std::cout << "\n\n - - - SUCCESSFUL DIGIT RECOGNITION - - - \n\n\n";
-    return true;
+    std::cout << "\n\n - - - SUCCESSFUL DIGIT RECOGNITION - - - \n\n\n";   
+	return true;
   }
  
   bool detect_blue_robot(const cv::Mat& hsv_img, const double scale, Polygon& triangle, double& x, double& y, double& theta){
@@ -628,16 +634,8 @@ int insidePolygon(Polygon obstacle, Point pt){
 }
   bool planPath(const Polygon& borders, const std::vector<Polygon>& obstacle_list, const std::vector<std::pair<int,Polygon>>& victim_list, const Polygon& gate, const float x, const float y, const float theta, Path& path, const std::string& config_folder){
    
-    //List of all current nodes
-    std::vector<path_pos> list_q;
-    //List of all current paths
-    std::vector<Path> list_qp;
-   
     int kmax = 10;      // Max angle of curvature
     int npts = 100;  // Standard discretization unit of arcs
-    double s;
-       
-    std::vector<Point> rawPath; // Non-discretized path
  
     // - - - GATE CENTER - - -
     double gateX = (gate[0].x + gate[1].x + gate[2].x + gate[3].x)/4;
@@ -653,7 +651,7 @@ int insidePolygon(Polygon obstacle, Point pt){
     } else {
         gateTh = acos(fabs(gate[1].x-gate[2].x) / dist_1);
     }
- 
+
     //  - - - VICTIM CENTER - - -
     std::vector<Point> victim_center;
     double victim_X;
@@ -706,212 +704,270 @@ int insidePolygon(Polygon obstacle, Point pt){
         obs_radius.emplace_back(maxDist / 2.0);
     }
  
-    // - - - FILL RAWPATH - - -
-    rawPath.push_back(Point(x,y));
- 
-    for (int i = 0; i < victim_center.size(); i++){
-        rawPath.push_back(victim_center[i]);
-    }
-    rawPath.push_back(Point(gateX, gateY));
-    
-    // - - - RRT GOES HERE - - -	
-    srand(time(NULL));
-    int MAX_X = (borders[1].x*100);
-    int MIN_X = (borders[0].x*100);
-    int MAX_Y = (borders[3].y*100);
-    int MIN_Y = (borders[0].y*100);
-    int samp_X = 0;
-    int samp_Y = 0;
-    double q_rand_x = 0;
-    double q_rand_y = 0;
-    int rand_count = 1;
-   
-    path_pos q_near; //First node in the tree
-   
-    std::vector<Pose> POINTS; //Temporary path from 1 goal to another goal
+    // - - - CHOOSE MISSION - - -
 
-    int goal = 1; //The first goal is the first number
-    bool failed_to_reach_goal = false;
-    bool trying_for_goal = false;
-    
-    while(goal < rawPath.size()){
+	std::vector<Point> rawPath; // Non-discretized path
 
-        std::cout << "Current goal: " << goal << std::endl;
-        list_q.clear();
-        list_q.shrink_to_fit(); //For memory purposes
-        list_qp.clear();
-        list_qp.shrink_to_fit(); //For memory purposes
- 
-        //Initialize with robot position (x,y,theta)
-        if(goal == 1){
-            q_near.x = x;
-            q_near.y = y;
-            q_near.theta = theta; //0;
-           
-        }
-	//If it is not goal = 1, we want to take the last position in Path
-        else{
-            
-            Pose p = path.points.back();
-            q_near.x = p.x;
-            q_near.y = p.y;
-            q_near.theta = p.theta;
-           
-        }
-        //RRT Line 1
-        Path p;
-        list_q.push_back(q_near);
-        list_qp.push_back(p); //Adding empty path for indexing purposes 
-        //RRT Line 2
-        bool goalReached = false;
-        while(goalReached == false){
-            
-           
-            //Reset if not found for too long
-            if(list_q.size() > 6){
-                path_pos l = list_q.at(0); //We clear the lists but we keep the inicial qnear
-                Path lp = list_qp.at(0); //We clear the lists but we keep the inicial empty path for indexing purpos
-                list_q.clear();
-                list_q.shrink_to_fit();                                
-                list_qp.clear();
-                list_qp.shrink_to_fit();
-                list_q.push_back(l);
-                list_qp.push_back(lp);         
-            }
-            bool rand_clear = false;
-            double ANGLE = 0.0;
-            int index;
-            double min_dist;
-            //RRT Line 3 & 4
-            while(!rand_clear){
-                min_dist = 100;
-                index = 0;
- 
-                samp_X = rand()%(MAX_X-MIN_X+1)+MIN_X;
-                samp_Y = rand()%(MAX_Y-MIN_Y+1)+MIN_Y;
-   
-                q_rand_x = samp_X/100.00;
-                q_rand_y = samp_Y/100.00;
-                rand_count = rand_count +1;
- 
-                if (rand_count % 2 == 0){
-                    q_rand_x =  rawPath[goal].x;//gateX;
-                    q_rand_y =  rawPath[goal].y;//gateY;
-                    trying_for_goal = true;
-                }
-   
-                //RRT Line 5 Calculate distance between q_rand and q_near
-       
-       
-                for(int i=0; i<list_q.size(); i++){
-                    double dist_points = sqrt(pow((q_rand_x-list_q.at(i).x),2)+pow((q_rand_y-list_q.at(i).y),2));
-                    if(dist_points < min_dist){
-                        min_dist = dist_points;
-                        index = i;
-                    }
-                }
-                //RRT Line 4
-                if((min_dist > 0.1 and min_dist < 0.4) or (rand_count % 2 == 0 and !failed_to_reach_goal) ){ //
-                    rand_clear = true;
-                }
-            }
-           
- 
-            //RRT Line 6
- 
-           
-           
- 
-            ANGLE = atan2(fabs(q_rand_y - list_q.at(index).y), fabs(q_rand_x - list_q.at(index).x));
-            if(q_rand_y < list_q.at(index).y){ //If qrand is under qnear, we switch the sign
-                ANGLE = -ANGLE;        
-            }
- 
- 
-            
-            Path newPath;
-            dubinsCurve dubins = {};
- 
- 	    // Finding a path from one incial point to goal
-            dubins_shortest_path(dubins, list_q.at(index).x, list_q.at(index).y, list_q.at(index).theta, q_rand_x, q_rand_y, ANGLE, kmax); 
-           
-            // Dicretize the 3 arcs
-            discretize_arc(dubins.arc_1, s, npts, newPath); // Arc 1
-            discretize_arc(dubins.arc_2, s, npts, newPath); // Arc 2
-            discretize_arc(dubins.arc_3, s, npts, newPath); // Arc 3
-           
-   
-            //RRT Line 7 Collision Check
-            // Find closests obstacle to the point in the curve
-            bool collision = false;
-            for(int j=0; j<newPath.points.size(); j++){
-                if(newPath.points.at(j).x < (borders[0].x + 0.02)  or newPath.points.at(j).x > (borders[1].x - 0.02) or newPath.points.at(j).y < (borders[0].y + 0.02)  or newPath.points.at(j).y > (borders[3].y - 0.02)){ //It's the point within the border
-                    collision = true;
-                    if(trying_for_goal){failed_to_reach_goal = true; trying_for_goal = false;}          
-                    break; 
-                }
-                for(int i=0; i<obstacle_list.size(); i++){
-                    double dist_to_ob = sqrt(pow((newPath.points.at(j).x-obs_center.at(i).x),2)+pow((newPath.points.at(j).y-obs_center.at(i).y),2));
-                    double result = insidePolygon(obstacle_list.at(i), Point(newPath.points.at(j).x,newPath.points.at(j).y));
-                   
-                    if(result != 1 or dist_to_ob < (obs_radius.at(i)+0.04)){
-                        collision = true;
-                        if(trying_for_goal){failed_to_reach_goal = true;trying_for_goal = false;}
-                        break; 
-                    }
-                }
-               
-            }
- 
-   
-            if(!collision){
-       
-                
-                failed_to_reach_goal = false;
- 		
-                path_pos q_new;
-                q_new.x = newPath.points.back().x;
-                q_new.y = newPath.points.back().y;
-                
-                q_new.theta = newPath.points.back().theta;
-                q_new.pathIndex = list_q.size();
-                //RRT Line 8
-                q_new.parentIndex = index;
-                
-                list_q.push_back(q_new);
-                list_qp.push_back(newPath);
- 
-                //RRT Line 9
-       
-                if(sqrt(pow((q_new.x - rawPath.at(goal).x),2)+pow((q_new.y - rawPath.at(goal).y),2)) < 0.01){
-                    
-                    goal = goal+1;
-                    goalReached = true;
-                    std::cout << "Goal " << goal << "reached." << std::endl;
-                }
-            }
-       
+	if (!mission_2){
 
-            if(goalReached){
-               
-                
-                path_pos pos = list_q.back();
-                
+		rawPath.push_back(Point(x,y));
+		for (int i = 0; i < victim_center.size(); i++){
+		    rawPath.push_back(victim_center[i]);
+		}
+		rawPath.push_back(Point(gateX, gateY));
+		
+		// Compute execution time
+	
+		//auto start = std::chrono::system_clock::now();
+		//auto end = std::chrono::system_clock::now();
+		//std::chrono::duration<double> elapsed = end - start;
+		//std::cout << elapsed.count() << std::endl; 
+
+		// - - - RRT HERE - - -
+
+		RRT(theta, path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, 0);
+
+	} else {
+		std::cout << "Mission 2" << std::endl;
+
+		double costmap[victim_center.size()+1][victim_center.size()+1] = {};
+
+		// Calculate connections COSTMAP
+
+		for (int i = 0; i < victim_center.size()+1; i++){			
+			for (int j = 0; j < victim_center.size()+1-i; j++){
+
+				//std::cout << i << " ~ " << j << std::endl;
+
+				/*// First point
+				if (i == 0){
+					rawPath.push_back(Point(x, y));			
+				} else {
+					rawPath.push_back(victim_center[i-1]);
+				}
+
+				// Second point
+				if (j == victim_center.size()-i){
+					rawPath.push_back(Point(gateX, gateY));
+				} else {
+					rawPath.push_back(victim_center[i+j]);
+				}*/
+
+				rawPath.push_back(Point(x, y));
+				rawPath.push_back(victim_center[j+i]);
+
+				double length_path;				
+
+				RRT(theta, path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, length_path);
+
+				//costmap[i][j] = length_path;
+
+				path = {};
+				rawPath.clear();
+
+			}	// End 2nd loop
+		}	// End 1st loop
+
+	}	// End mission 2
        
-                while(pos.pathIndex != 0){
-                    
-                    POINTS.insert(POINTS.begin(),list_qp.at(pos.pathIndex).points.begin(),list_qp.at(pos.pathIndex).points.end());
-                   
-                   
-                    pos = list_q.at(pos.parentIndex);
-                }
-            }
-           
-        }
-        path.points.insert(path.points.end(),POINTS.begin(), POINTS.end());
-        POINTS.clear();
-        POINTS.shrink_to_fit();
-        }
-    }
-    // - - - - - - - - - - - - - - -       
+}
+
+void RRT(const float theta, Path& path, std::vector<Point>& rawPath, const Polygon& borders, int kmax, int npts, const std::vector<Polygon>& obstacle_list, std::vector<double> obs_radius, std::vector<Point> obs_center, double length_path){
+
+	//List of all current nodes
+	std::vector<path_pos> nodes_list;
+	//List of all current paths
+	std::vector<Path> paths_list;
+
+	double s;
+
+	srand(time(NULL));
+	int MAX_X = (borders[1].x*100);
+	int MIN_X = (borders[0].x*100);
+	int MAX_Y = (borders[3].y*100);
+	int MIN_Y = (borders[0].y*100);
+	int samp_X = 0;
+	int samp_Y = 0;
+	double q_rand_x = 0;
+	double q_rand_y = 0;
+	int rand_count = 1;
+
+	path_pos first_node; //First node in the tree
+
+	std::vector<Pose> temp_path; //Temporary path from point to point
+
+	int goal = 1; //The first goal is the first number
+	bool failed_to_reach_goal = false;
+	bool trying_for_goal = false;
+
+	while(goal < rawPath.size()){
+
+		std::cout << "Current goal: " << goal << std::endl;
+		nodes_list.clear();
+		nodes_list.shrink_to_fit(); //For memory purposes
+		paths_list.clear();
+		paths_list.shrink_to_fit(); //For memory purposes
+
+		//Initialize with robot position (x,y,theta)
+		if(goal == 1){
+		    first_node.x = rawPath[0].x;
+		    first_node.y = rawPath[0].y;
+		    first_node.theta = 0; //theta or 0;
+		}
+		//If not goal = 1, take the last position in Path
+		else{
+		    Pose p = path.points.back();
+		    first_node.x = p.x;
+		    first_node.y = p.y;
+		    first_node.theta = p.theta;
+		}
+
+		//RRT Line 1
+		Path p;
+		nodes_list.push_back(first_node);
+		paths_list.push_back(p); //Adding empty path for indexing purposes
+
+		//RRT Line 2
+		bool goalReached = false;
+		while(goalReached == false){
+		   
+		    //Reset if not found for too long
+		    if(nodes_list.size() > 6){
+		        path_pos l = nodes_list.at(0); //We clear the lists but we keep the initial qnear
+		        Path lp = paths_list.at(0); //We clear the lists but we keep the initial empty path for indexing purposes
+		        nodes_list.clear();
+		        nodes_list.shrink_to_fit();                                
+		        paths_list.clear();
+		        paths_list.shrink_to_fit();
+		        nodes_list.push_back(l);
+		        paths_list.push_back(lp);         
+		    }
+		    bool rand_clear = false;
+		    double ANGLE = 0.0;
+		    int index;
+		    double min_dist;
+
+		    //RRT Line 3 & 4 - Compute next random point
+		    while(!rand_clear){
+		        min_dist = 100;
+		        index = 0;
+
+		        samp_X = rand()%(MAX_X-MIN_X+1)+MIN_X;
+		        samp_Y = rand()%(MAX_Y-MIN_Y+1)+MIN_Y;
+
+		        q_rand_x = samp_X/100.00;
+		        q_rand_y = samp_Y/100.00;
+		        rand_count = rand_count +1;
+
+		        if (rand_count % 2 == 0){	// 50% of times try goal?
+		            q_rand_x =  rawPath[goal].x;//gateX;
+		            q_rand_y =  rawPath[goal].y;//gateY;
+		            trying_for_goal = true;
+		        }
+
+		        //RRT Line 5 - Calculate distance btw q_rand and first_node    
+		        for(int i=0; i<nodes_list.size(); i++){
+		            double dist_points = sqrt(pow((q_rand_x-nodes_list.at(i).x),2)+pow((q_rand_y-nodes_list.at(i).y),2));
+		            if(dist_points < min_dist){
+		                min_dist = dist_points;
+		                index = i;
+		            }
+		        }
+
+		        //RRT Line 4 - Check if reached point
+		        if((min_dist > 0.1 and min_dist < 0.4) or (rand_count % 2 == 0 and !failed_to_reach_goal) ){ //
+		            rand_clear = true;
+		        }
+		    }
+		   
+		    //RRT Line 6 - Compute angle
+		    ANGLE = atan2(fabs(q_rand_y - nodes_list.at(index).y), fabs(q_rand_x - nodes_list.at(index).x));
+		    if(q_rand_y < nodes_list.at(index).y){ //If qrand is under qnear, we switch the sign
+		        ANGLE = -ANGLE;
+		    }
+
+		    Path newPath;
+		    dubinsCurve dubins = {};
+
+			// Finding a path from one initial point to goal
+		    dubins_shortest_path(dubins, nodes_list.at(index).x, nodes_list.at(index).y, nodes_list.at(index).theta, q_rand_x, q_rand_y, ANGLE, kmax); 
+		   
+		    // Dicretize the 3 arcs
+		    discretize_arc(dubins.arc_1, s, npts, newPath); // Arc 1
+		    discretize_arc(dubins.arc_2, s, npts, newPath); // Arc 2
+		    discretize_arc(dubins.arc_3, s, npts, newPath); // Arc 3
+		   
+		    //RRT Line 7 - Collision check
+		    // Find closests obstacle to point in curve
+		    bool collision = false;
+
+			// Check arena borders
+		    for(int j=0; j<newPath.points.size(); j++){
+		        if(newPath.points.at(j).x < (borders[0].x + 0.02) or newPath.points.at(j).x > (borders[1].x - 0.02) or newPath.points.at(j).y < (borders[0].y + 0.02)  or newPath.points.at(j).y > (borders[3].y - 0.02)){
+		            collision = true;
+		            if(trying_for_goal){failed_to_reach_goal = true; trying_for_goal = false;}        
+		            break; 
+		        }
+
+				// Check obstacle collisions
+		        for(int i=0; i<obstacle_list.size(); i++){
+		            double dist_to_ob = sqrt(pow((newPath.points.at(j).x-obs_center.at(i).x),2)+pow((newPath.points.at(j).y-obs_center.at(i).y),2));
+		            double result = insidePolygon(obstacle_list.at(i), Point(newPath.points.at(j).x,newPath.points.at(j).y)); // Possibly useless, since we check the radius of the obstacle anyways
+		           
+		            if(result != 1 or dist_to_ob < (obs_radius.at(i)+0.04)){
+		                collision = true;
+		                if(trying_for_goal){failed_to_reach_goal = true;trying_for_goal = false;}
+		                break; 
+		            }
+		        }
+		    }
+
+		    if(!collision){
+		        
+		        failed_to_reach_goal = false;
+	
+		        path_pos new_node;
+		        new_node.x = newPath.points.back().x;
+		        new_node.y = newPath.points.back().y;
+		        
+		        new_node.theta = newPath.points.back().theta;
+		        new_node.pathIndex = nodes_list.size();
+
+		        //RRT Line 8
+		        new_node.parentIndex = index;
+		        
+		        nodes_list.push_back(new_node);
+		        paths_list.push_back(newPath);
+
+		        //RRT Line 9 - Check if goal reached
+		        if(sqrt(pow((new_node.x - rawPath.at(goal).x),2)+pow((new_node.y - rawPath.at(goal).y),2)) < 0.01){
+		            
+		            goalReached = true;
+		            std::cout << "Goal " << goal << " reached" << std::endl;
+					goal += 1;
+		        }
+		    }
+
+		    if(goalReached){
+
+		        path_pos pos = nodes_list.back();
+	   
+		        while(pos.pathIndex != 0){
+
+					// Blocks here on 2nd cycle
+		            
+		            temp_path.insert(temp_path.begin(),paths_list.at(pos.pathIndex).points.begin(),paths_list.at(pos.pathIndex).points.end());
+		           
+		            pos = nodes_list.at(pos.parentIndex);
+
+		        }
+		    }
+		}
+
+		// Add points to final path
+		path.points.insert(path.points.end(),temp_path.begin(), temp_path.end());
+		temp_path.clear();
+		temp_path.shrink_to_fit();
+		}
+	}
 }
