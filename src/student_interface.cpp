@@ -9,7 +9,6 @@
 #include <unistd.h>
 #include <algorithm>
 #include <math.h>
-#include <chrono>
  
 #include <experimental/filesystem>
  
@@ -18,27 +17,23 @@
  
 namespace student {
 
-bool mission_2 = true;
+const bool mission_2 = true;
+const int bonus = 5;	// Bonus time for picking up victim (seconds)
+const double speed = 0.2;	// Robot speed, for calculating travelling times
+							// Should be ~ 0.2 m/s (0.5m/2.5s)
 
 void RRT(const float theta, Path& path, std::vector<Point>& rawPath, const Polygon& borders, int kmax, int npts, const std::vector<Polygon>& obstacle_list, std::vector<double> obs_radius, std::vector<Point> obs_center, double& length_path);
- 
-// To sort victim_list by 1st elem of pair (int)
-bool sort_pair(const std::pair<int,Polygon>& a, const std::pair<int,Polygon>& b){
-    return (a.first < b.first);
-}
- 
-double orientation(Point a, Point b, Point c){
- 
-    Point ab, cb;
-    ab.x = b.x-a.x; ab.y = b.y-a.y;
-    cb.x = b.x-c.x; cb.y = b.y-c.y;
- 
-    double dot = ab.x*cb.x + ab.y*cb.y;
-    double cross = ab.x*cb.y - ab.y*cb.x;
- 
-    return atan2(cross, dot);
-}
- 
+
+std::vector<int> Dijkstra(std::vector<std::vector<double>> costmap);
+
+bool sort_pair(const std::pair<int,Polygon>& a, const std::pair<int,Polygon>& b);
+
+double compute_angle(Point a, Point b);
+
+
+// - - - - - - - - - - - - - - - - - - - - - - - - -
+
+
 void loadImage(cv::Mat& img_out, const std::string& config_folder){  
   static bool initialized = false;
   static std::vector<cv::String> img_list; // list of images to load
@@ -717,21 +712,14 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		    rawPath.push_back(victim_center[i]);
 		}
 		rawPath.push_back(Point(gateX, gateY));
-		
-		// Compute execution time
-	
-		//auto start = std::chrono::system_clock::now();
-		//auto end = std::chrono::system_clock::now();
-		//std::chrono::duration<double> elapsed = end - start;
-		//std::cout << elapsed.count() << std::endl; 
-
-		// - - - RRT HERE - - -
 
 		double length_path = 0;
 
+		// Call planning algorithm
 		RRT(theta, path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, length_path);
 
 	} else {
+	
 		std::cout << "Mission 2" << std::endl;
 
 		// Initialize costmap matrix
@@ -747,42 +735,72 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 				std::cout << "Combination: " << cnt << std::endl;
 				cnt++;
 
-				// First point
+				// Get 1st point
 				if (i == 0){
 					rawPath.push_back(Point(x, y));			
 				} else {
 					rawPath.push_back(victim_center[i-1]);
 				}
 
-				// Second point
+				// Get 2nd point
 				if (j == victim_center.size()-i){
 					rawPath.push_back(Point(gateX, gateY));
 				} else {
 					rawPath.push_back(victim_center[i+j]);
 				}
 
-				double length_path = 0;				
+				double temp_theta = compute_angle(rawPath[0],rawPath[1]);
+				double length_path = 0;			
 
-				RRT(theta, path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, length_path);
+				// Call planning algorithm
+				RRT(temp_theta, path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, length_path);
 
-				costmap[i][i+j] = length_path;
-
+				// Add time cost to costmap
+				costmap[i][i+j] = length_path/speed;
+				
+				//Add time bonus, unless GOAL column
+				if(i+j != costmap.size()-1){
+					costmap[i][i+j] -= bonus;
+				}
+ 
+ 				// Clear paths for next computation
 				path = {};
 				rawPath.clear();
 
 			}	// End 2nd loop
 		}	// End 1st loop
 
-	for (int i = 0; i < costmap.size(); i++){
-		for (int j = 0; j < costmap.size(); j++){
-			std::cout << costmap[i][j] << " ";
-		}
-		std::cout << std::endl;
-	}
+		// Print costmap
 
-	}	// End mission 2
+		for (int i = 0; i < costmap.size(); i++){
+			for (int j = 0; j < costmap.size(); j++){
+				std::cout << costmap[i][j] << " ";
+			}
+			std::cout << std::endl;
+		}
+		
+		// Find best cost path
+		std::vector<int> best_conf = Dijkstra(costmap);
+		
+		rawPath.push_back(Point(x,y));
+		for (int i = 0; i < best_conf.size(); i++){
+		    rawPath.push_back(victim_center[best_conf[i]]);
+		}
+		rawPath.push_back(Point(gateX, gateY));
+		
+		double length_path = 0;
+		
+		RRT(0, path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, length_path);
+
+  	}	// End mission 2
        
 }
+
+
+
+// - - - - - - - - - - SECONDARY FUNCTIONS - - - - - - - - - - - -
+
+
 
   void RRT(const float theta, Path& path, std::vector<Point>& rawPath, const Polygon& borders, int kmax, int npts, const std::vector<Polygon>& obstacle_list, std::vector<double> obs_radius, std::vector<Point> obs_center, double& length_path){
 
@@ -824,7 +842,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		if(goal == 1){
 		    first_node.x = rawPath[0].x;
 		    first_node.y = rawPath[0].y;
-		    first_node.theta = 0; //theta or 0;
+		    first_node.theta = theta; // TODO: theta or 0;
 		}
 		//If not goal = 1, take the last position in Path
 		else{
@@ -847,8 +865,6 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		    //Reset if not found for too long
 		    if(nodes_list.size() > 10){
 
-				std::cout << "Reinitializing lists" << std::endl;
-
 		        path_pos l = nodes_list.at(0); //We clear the lists but we keep the initial qnear
 		        Path lp = paths_list.at(0); //We clear the lists but we keep the initial empty path for indexing purposes
 		        nodes_list.clear();
@@ -859,12 +875,12 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		        paths_list.push_back(lp);         
 		    }
 		    bool rand_clear = false;
-		    double ANGLE = 0.0;
 		    int index;
 		    double min_dist;
 
 		    //RRT Line 3 & 4 - Compute next random point
 		    while(!rand_clear){
+		    	
 		        min_dist = 100;
 		        index = 0;
 
@@ -881,7 +897,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		            trying_for_goal = true;
 		        }
 
-		        //RRT Line 5 - Calculate distance btw q_rand and first_node    
+		        //RRT Line 5 - Find parent node (closest)    
 		        for(int i=0; i<nodes_list.size(); i++){
 		            double dist_points = sqrt(pow((q_rand_x-nodes_list.at(i).x),2)+pow((q_rand_y-nodes_list.at(i).y),2));
 		            if(dist_points < min_dist){
@@ -897,11 +913,10 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		    }
 		   
 		    //RRT Line 6 - Compute angle
-		    ANGLE = atan2(fabs(q_rand_y - nodes_list.at(index).y), fabs(q_rand_x - nodes_list.at(index).x));
-		    if(q_rand_y < nodes_list.at(index).y){ //If qrand is under qnear, we switch the sign
-		        ANGLE = -ANGLE;
-		    }
-
+		    double ANGLE = 0.0;
+		    ANGLE = compute_angle(Point(nodes_list.at(index).x,nodes_list.at(index).y), Point(q_rand_x,q_rand_y));
+		    
+		    
 		    Path newPath;
 		    dubinsCurve dubins = {};
 
@@ -991,9 +1006,96 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 
 	}
 
-  }
+}
+
+// Dijkstra's Algorithm - To solve best cost to goal
+std::vector<int> Dijkstra(std::vector<std::vector<double>> costmap){
+
+	std::vector<double> best_cost(costmap.size());
+	std::vector<std::vector<int>> combinations(costmap.size()); 
+
+	for (int i = 0; i < costmap.size(); i++){ 			// Row
+		for (int j = 0; j < costmap.size()-i; j++){		//Column
+			if (i == 0){
+				best_cost[j] = costmap[i][j];
+			} else if (costmap[i][j+i] + best_cost[i-1] < best_cost[j+i]){
+				
+				best_cost[j+i] = costmap[i][j+i] + best_cost[i-1];
+				
+				combinations[j+i] = {};
+				
+				//combinations[j+i] = combinations[i-1];
+				
+				if (combinations[i-1].size() > 0){
+					for (int k = 0; k < combinations[i-1].size(); k++){
+						combinations[j+i].push_back(combinations[i-1][k]);
+					}
+				}
+				
+				combinations[j+i].push_back(i-1);
+				
+				// PRINT
+				std::cout << "Combination at " << i << ", " << j+i << ": ";
+				for (int k = 0; k < combinations[j+i].size(); k++){
+					std::cout << combinations[j+i][k]+1 <<  " ";
+				}
+				std::cout << std::endl;
+				
+			}	
+		}
+	}
+
+	// Print result
+
+	std::cout << "Best time to goal: " << best_cost.back() << std::endl;
+	
+	std::cout << "With combination:";
+	for (int i = 0; i < combinations.back().size(); i++){
+		if (i != 0){
+			std::cout << ", " << combinations.back()[i]+1; 
+		} else {
+			std::cout << " " << combinations.back()[i]+1;
+		}
+	}
+	std::cout << std::endl;
+
+	return combinations.back();
 
 }
+
+// To sort victim_list by 1st elem of pair (int)
+bool sort_pair(const std::pair<int,Polygon>& a, const std::pair<int,Polygon>& b){
+    return (a.first < b.first);
+}
+
+// Compute angle at next point
+double compute_angle(Point a, Point b){
+	
+  	double angle = atan2(fabs(a.y - b.y), fabs(a.x - b.x));
+  		
+  	/*if (b.y < a.y){
+  		angle = -angle;
+    }*/	
+  	
+  	if (b.x > a.x and b.y < a.y){
+  		angle = -angle;
+    } else if (b.x < a.x and b.y > a.y){
+    	angle = M_PI-angle;
+    } else if (b.x < a.x and b.y < a.y){
+    	angle = M_PI+angle;
+    }
+	
+	return angle;
+		    
+}
+
+}	// END SCRIPT
+
+
+
+
+
+
 
 
 
