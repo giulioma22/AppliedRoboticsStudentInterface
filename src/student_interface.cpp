@@ -3,6 +3,8 @@
  
 #include <stdexcept>
 #include <sstream>
+#include <iostream>
+#include <fstream>
  
 #include <vector>
 #include <atomic>
@@ -17,10 +19,14 @@
  
 namespace student {
 
-const bool mission_2 = true;
-const int bonus = 5;	// Bonus time for picking up victim (seconds)
+const bool mission_2 = false;
+const int bonus = 2;	// Bonus time for picking up victim (seconds)
 const double speed = 0.2;	// Robot speed, for calculating travelling times
 							// Should be ~ 0.2 m/s (0.5m/2.5s)
+							
+const bool RRT_STAR = false;
+
+std::ofstream myfile("/home/lar2019/workspace/project/src/nodes.csv");
 
 void RRT(const float theta, Path& path, std::vector<Point>& rawPath, const Polygon& borders, int kmax, int npts, const std::vector<Polygon>& obstacle_list, std::vector<double> obs_radius, std::vector<Point> obs_center, double& length_path);
 
@@ -391,7 +397,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
       if (area < MIN_AREA_SIZE) continue; // filter too small contours to remove false positives
 
       std::vector<cv::Point> approx_curve;
-      approxPolyDP(contours[i], approx_curve, 10, true);
+      approxPolyDP(contours[i], approx_curve, 1, true);
       if(approx_curve.size() < 6) continue; //fitler out the gate
      
       Polygon scaled_contour;
@@ -594,7 +600,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
         double theta;
         int pathIndex;
         int parentIndex;
-        //path_pos q_parent;
+        double cost;
     };
 
   //Check if the point is in the polygon
@@ -712,11 +718,16 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		    rawPath.push_back(victim_center[i]);
 		}
 		rawPath.push_back(Point(gateX, gateY));
+		
+		//rawPath.push_back(victim_center[2]);;
+		//rawPath.push_back(victim_center[3]);	//TODO: Remove
 
 		double length_path = 0;
 
 		// Call planning algorithm
 		RRT(theta, path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, length_path);
+		
+		//RRT(compute_angle(victim_center[1],victim_center[3]), path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, length_path);	//TODO: Remove
 
 	} else {
 	
@@ -725,7 +736,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		// Initialize costmap matrix
 		std::vector<std::vector<double>> costmap(victim_center.size()+1, std::vector<double>(victim_center.size()+1));
 
-		// Calculate connections COSTMAP
+		// Calculate connections - COSTMAP
 
 		int cnt = 1;
 
@@ -790,7 +801,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		
 		double length_path = 0;
 		
-		RRT(0, path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, length_path);
+		RRT(0, path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, length_path);	//TODO: Switch 0 to theta
 
   	}	// End mission 2
        
@@ -842,7 +853,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		if(goal == 1){
 		    first_node.x = rawPath[0].x;
 		    first_node.y = rawPath[0].y;
-		    first_node.theta = theta; // TODO: theta or 0;
+		    first_node.theta = 0; // TODO: theta or 0;
 		}
 		//If not goal = 1, take the last position in Path
 		else{
@@ -859,14 +870,28 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 
 		//RRT Line 2 - Reach each major point (rawPath)
 		bool goalReached = false;
+		int loop_cnt = 1;
 
 		while(goalReached == false){
+		
+		//if (!RRT_STAR){
+		
+		
+			if (loop_cnt == 1000){
+				throw std::runtime_error(" - - - ERROR: Could not converge - - -");				
+			}
+		
+			std::cout << "Loop: " << loop_cnt << std::endl;
+			loop_cnt++;
 		   
 		    //Reset if not found for too long
 		    if(nodes_list.size() > 10){
-
-		        path_pos l = nodes_list.at(0); //We clear the lists but we keep the initial qnear
-		        Path lp = paths_list.at(0); //We clear the lists but we keep the initial empty path for indexing purposes
+		    
+		    	std::cout << "Clearing list" << std::endl;
+		    
+				// Clear lists and keep only 1st element
+		        path_pos l = nodes_list.at(0);
+		        Path lp = paths_list.at(0);
 		        nodes_list.clear();
 		        nodes_list.shrink_to_fit();                                
 		        paths_list.clear();
@@ -874,39 +899,41 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		        nodes_list.push_back(l);
 		        paths_list.push_back(lp);         
 		    }
+		    
 		    bool rand_clear = false;
 		    int index;
-		    double min_dist;
+		    double min_dist, tmp_cost;
 
 		    //RRT Line 3 & 4 - Compute next random point
 		    while(!rand_clear){
 		    	
-		        min_dist = 100;
-		        index = 0;
+		    	index = 0;
+		        min_dist = 1000;
+		        tmp_cost = 100000;
 
 		        samp_X = rand()%(MAX_X-MIN_X+1)+MIN_X;
 		        samp_Y = rand()%(MAX_Y-MIN_Y+1)+MIN_Y;
 
 		        q_rand_x = samp_X/100.00;
 		        q_rand_y = samp_Y/100.00;
-		        rand_count = rand_count +1;
+		        rand_count += 1;
 
-		        if (rand_count % 2 == 0){	// 50% of times try goal?
-		            q_rand_x =  rawPath[goal].x;//gateX;
-		            q_rand_y =  rawPath[goal].y;//gateY;
+		        if (rand_count % 2 == 0){	// 50% of times next goal
+		            q_rand_x =  rawPath[goal].x;
+		            q_rand_y =  rawPath[goal].y;
 		            trying_for_goal = true;
 		        }
 
-		        //RRT Line 5 - Find parent node (closest)    
-		        for(int i=0; i<nodes_list.size(); i++){
-		            double dist_points = sqrt(pow((q_rand_x-nodes_list.at(i).x),2)+pow((q_rand_y-nodes_list.at(i).y),2));
-		            if(dist_points < min_dist){
-		                min_dist = dist_points;
-		                index = i;
-		            }
-		        }
+		        //RRT Line 5 - Find parent node (closest)
+			    for(int i=0; i<nodes_list.size(); i++){
+			        double dist_points = sqrt(pow((q_rand_x-nodes_list.at(i).x),2)+pow((q_rand_y-nodes_list.at(i).y),2));
+			        if(dist_points < min_dist){
+			            min_dist = dist_points;
+			            index = i;
+			        }
+			    }
 
-		        //RRT Line 4 - Check if reached point
+		        //RRT Line 4 - Check if small distance or reached goal
 		        if((min_dist > 0.1 and min_dist < 0.4) or (rand_count % 2 == 0 and !failed_to_reach_goal) ){ //
 		            rand_clear = true;
 		        }
@@ -914,8 +941,15 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		   
 		    //RRT Line 6 - Compute angle
 		    double ANGLE = 0.0;
-		    ANGLE = compute_angle(Point(nodes_list.at(index).x,nodes_list.at(index).y), Point(q_rand_x,q_rand_y));
+		    //ANGLE = compute_angle(Point(nodes_list.at(index).x,nodes_list.at(index).y), Point(q_rand_x,q_rand_y));
 		    
+		    // If going to next goal and not last goal
+		    if (q_rand_x == rawPath[goal].x and q_rand_y == rawPath[goal].y and rawPath.size() != goal+1){
+		    	ANGLE = compute_angle(Point(nodes_list.at(index).x,nodes_list.at(index).y), rawPath[goal+1]);
+		    // If point before next goal or next goal is last
+	    	} else {
+		    	ANGLE = compute_angle(Point(nodes_list.at(index).x,nodes_list.at(index).y), rawPath[goal]);
+		    }
 		    
 		    Path newPath;
 		    dubinsCurve dubins = {};
@@ -952,8 +986,10 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		            }
 		        }
 		    }
-
+		    
 		    if(!collision){
+		        
+		        std::cout << "NO COLLISION" << std::endl;
 		        
 		        failed_to_reach_goal = false;
 	
@@ -961,35 +997,48 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		        new_node.x = newPath.points.back().x;
 		        new_node.y = newPath.points.back().y;
 		        
+		        // For plitting nodes
+		        /*if (!myfile.is_open()){
+				    throw std::runtime_error("Cannot open nodes.csv");
+	  			}*/
+	  			
+				myfile << new_node.x << "," << new_node.y << std::endl;
+				// End plotting
+		        
 		        new_node.theta = newPath.points.back().theta;
 		        new_node.pathIndex = nodes_list.size();
 
 		        //RRT Line 8
 		        new_node.parentIndex = index;
+		        new_node.cost = tmp_cost;
 		        
 		        nodes_list.push_back(new_node);
 		        paths_list.push_back(newPath);
 
 		        //RRT Line 9 - Check if goal reached
-		        if(sqrt(pow((new_node.x - rawPath.at(goal).x),2)+pow((new_node.y - rawPath.at(goal).y),2)) < 0.01){
+		        if(sqrt(pow((new_node.x - rawPath.at(goal).x),2)+pow((new_node.y - rawPath.at(goal).y),2)) < 0.1){
 		            
 		            goalReached = true;
 		            std::cout << "Goal " << goal << " reached" << std::endl;
 					goal += 1;
 		        }
 		    }
+		    
+		    if (loop_cnt == 1000){
+		    	goal += 1; 
+				goalReached = true; //TODO: remove
+			}
 
 		    if(goalReached){
 
 		        path_pos pos = nodes_list.back();
 	   
 		        while(pos.pathIndex != 0){
-
-					// Blocks here on 2nd cycle
 		            
 		            temp_path.insert(temp_path.begin(),paths_list.at(pos.pathIndex).points.begin(),paths_list.at(pos.pathIndex).points.end());
 		           
-		            pos = nodes_list.at(pos.parentIndex);
+		        	// Go backwards to parent  
+		        	pos = nodes_list.at(pos.parentIndex);
 
 		        }
 		    }
@@ -1005,8 +1054,228 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		}
 
 	}
+	
+	myfile.close();
 
 }
+		    
+		    
+	   //} 
+/*
+	    else {	// - - - - - RRT_STAR - - - - -
+		
+			std::cout << "Loop: " << loop_cnt << std::endl;
+			loop_cnt++;
+		   
+		    //Reset if not found for too long
+		    if(nodes_list.size() > 10){
+		    
+		    	std::cout << "Clearing list" << std::endl;
+		    
+				// Clear lists and keep only 1st element
+		        path_pos l = nodes_list.at(0);
+		        Path lp = paths_list.at(0);
+		        nodes_list.clear();
+		        nodes_list.shrink_to_fit();                                
+		        paths_list.clear();
+		        paths_list.shrink_to_fit();
+		        nodes_list.push_back(l);
+		        paths_list.push_back(lp);         
+		    }
+		    
+		    bool rand_clear = false;
+		    int index;
+		    double min_dist, tmp_cost;
+
+		    //RRT Line 3 & 4 - Compute next random point
+		    while(!rand_clear){
+		    	
+		    	index = 0;
+		        min_dist = 1000;
+		        tmp_cost = 100000;
+
+		        samp_X = rand()%(MAX_X-MIN_X+1)+MIN_X;
+		        samp_Y = rand()%(MAX_Y-MIN_Y+1)+MIN_Y;
+
+		        q_rand_x = samp_X/100.00;
+		        q_rand_y = samp_Y/100.00;
+		        rand_count += 1;
+
+		        if (rand_count % 2 == 0){	// 50% of times next goal
+		            q_rand_x =  rawPath[goal].x;
+		            q_rand_y =  rawPath[goal].y;
+		            trying_for_goal = true;
+		        }
+
+		        //RRT Line 5 - Find parent node (closest)
+		        
+			    // Choose parent w/ lowest cost 
+			    
+			    // 1st IMPLEMENTATION
+			    
+			    /*for(int i=0; i<nodes_list.size(); i++){
+			        double dist_points = sqrt(pow((q_rand_x-nodes_list.at(i).x),2)+pow((q_rand_y-nodes_list.at(i).y),2));
+			        if(dist_points+nodes_list.at(i).cost < tmp_cost){
+  						min_dist = dist_points;
+			            index = i;
+			            tmp_cost = dist_points+nodes_list.at(i).cost;
+			        }
+			    }*/
+			    
+			
+/*
+
+				// 2nd IMPLEMENTATION
+			    
+			    // TODO: Parent needs to be reachable
+			    for(int i=0; i<nodes_list.size(); i++){
+			        double dist_points = sqrt(pow((q_rand_x-nodes_list.at(i).x),2)+pow((q_rand_y-nodes_list.at(i).y),2));
+			        if(min_dist > 0.1 and min_dist < 0.4){
+			        
+		double ANGLE = 0.0;
+
+		// If going to next goal and not last goal
+		if (q_rand_x == rawPath[goal].x and q_rand_y == rawPath[goal].y and rawPath.size() != goal+1){
+			ANGLE = compute_angle(Point(nodes_list.at(index).x,nodes_list.at(index).y), rawPath[goal+1]);
+		// If point before next goal or next goal is last
+		} else {
+			ANGLE = compute_angle(Point(nodes_list.at(index).x,nodes_list.at(index).y), rawPath[goal]);
+		}
+				
+		Path newPath;
+		dubinsCurve dubins = {};
+
+		// Finding a path from one initial point to goal
+		dubins_shortest_path(dubins, nodes_list.at(i).x, nodes_list.at(i).y, nodes_list.at(i).theta, q_rand_x, q_rand_y, ANGLE, kmax);
+
+		// Dicretize the 3 arcs
+		discretize_arc(dubins.arc_1, s, npts, newPath); // Arc 1
+		discretize_arc(dubins.arc_2, s, npts, newPath); // Arc 2
+		discretize_arc(dubins.arc_3, s, npts, newPath); // Arc 3
+
+		bool collision = false;
+
+		// Check arena borders
+		for(int j=0; j<newPath.points.size(); j++){
+			if(newPath.points.at(j).x < (borders[0].x + 0.02) or newPath.points.at(j).x > (borders[1].x - 0.02) or newPath.points.at(j).y < (borders[0].y + 0.02)  or newPath.points.at(j).y > (borders[3].y - 0.02)){
+				collision = true;
+				if(trying_for_goal){failed_to_reach_goal = true; trying_for_goal = false;}        
+				break; 
+			}
+
+			// Check obstacle collisions
+			for(int i=0; i<obstacle_list.size(); i++){
+				double dist_to_ob = sqrt(pow((newPath.points.at(j).x-obs_center.at(i).x),2)+pow((newPath.points.at(j).y-obs_center.at(i).y),2));
+				double result = insidePolygon(obstacle_list.at(i), Point(newPath.points.at(j).x,newPath.points.at(j).y)); // Possibly useless, since we check the radius of the obstacle anyways
+			   
+				if(result != 1 or dist_to_ob < (obs_radius.at(i)+0.04)){
+					collision = true;
+					if(trying_for_goal){failed_to_reach_goal = true;trying_for_goal = false;}
+					break; 
+				}
+			}
+		} // End collission check
+			        
+			        
+			            //min_dist = dist_points;
+			            //index = i;
+			            //tmp_cost = dist_points+nodes_list.at(i).cost;
+			        }
+			        
+				}
+				    
+			}
+
+		} // END RRT / RRT_STAR 
+
+		    if(!collision){
+		        
+		        std::cout << "NO COLLISION" << std::endl;
+		        
+		        failed_to_reach_goal = false;
+	
+		        path_pos new_node = {};
+		        new_node.x = newPath.points.back().x;
+		        new_node.y = newPath.points.back().y;
+		        
+		        // For plitting nodes
+		        //if (!myfile.is_open()){
+				//    throw std::runtime_error("Cannot open nodes.csv");
+	  			//}
+	  			
+				myfile << new_node.x << "," << new_node.y << std::endl;
+				// End plotting
+		        
+		        new_node.theta = newPath.points.back().theta;
+		        new_node.pathIndex = nodes_list.size();
+
+		        //RRT Line 8
+		        new_node.parentIndex = index;
+		        new_node.cost = tmp_cost;
+		        
+		        nodes_list.push_back(new_node);
+		        paths_list.push_back(newPath);
+		        
+		        /*if (RRT_STAR){
+				    // Rewriting
+				    for(int i=0; i<nodes_list.size(); i++){
+				        double dist_points = sqrt(pow((new_node.x-nodes_list.at(i).x),2)+pow((new_node.y-nodes_list.at(i).y),2));
+				        // Check if lower cost parent exists
+				        if(dist_points+new_node.cost < nodes_list.at(i).cost){
+				        	std::cout << "Rewriting node" << std::endl;
+				        	// Update node data
+				        	nodes_list.at(i).theta = compute_angle(Point(new_node.x, new_node.y), Point(nodes_list.at(i).x, nodes_list.at(i).y));
+				        	// PathIndex remains the same - Was added before
+				            nodes_list.at(i).parentIndex = nodes_list.size()-1;
+				            nodes_list.at(i).cost = dist_points+new_node.cost;
+				        }
+				    }
+				}*/
+
+/*
+		        //RRT Line 9 - Check if goal reached
+		        if(sqrt(pow((new_node.x - rawPath.at(goal).x),2)+pow((new_node.y - rawPath.at(goal).y),2)) < 0.1){
+		            
+		            goalReached = true;
+		            std::cout << "Goal " << goal << " reached" << std::endl;
+					goal += 1;
+		        }
+		    }
+		    
+		    if (loop_cnt == 1000){
+		    	goal += 1; 
+				goalReached = true; //TODO: remove
+			}
+
+		    if(goalReached){
+
+		        path_pos pos = nodes_list.back();
+	   
+		        while(pos.pathIndex != 0){
+		            
+		            temp_path.insert(temp_path.begin(),paths_list.at(pos.pathIndex).points.begin(),paths_list.at(pos.pathIndex).points.end());
+		           
+		        	// Go backwards to parent  
+		        	pos = nodes_list.at(pos.parentIndex);
+
+		        }
+		    }
+		}
+
+		// Add points to final path
+		path.points.insert(path.points.end(), temp_path.begin(), temp_path.end());
+		temp_path.clear();
+		temp_path.shrink_to_fit();
+
+		for (int i = 0; i < path.points.size()-1; i++){
+			length_path += sqrt(pow(path.points[i].x-path.points[i+1].x,2) + pow(path.points[i].y-path.points[i+1].y,2));
+		}
+
+	}
+	
+	myfile.close();
+
+}*/
 
 // Dijkstra's Algorithm - To solve best cost to goal
 std::vector<int> Dijkstra(std::vector<std::vector<double>> costmap){
@@ -1046,9 +1315,7 @@ std::vector<int> Dijkstra(std::vector<std::vector<double>> costmap){
 	}
 
 	// Print result
-
-	std::cout << "Best time to goal: " << best_cost.back() << std::endl;
-	
+	std::cout << std::endl << "Best time to goal: " << best_cost.back() << std::endl;
 	std::cout << "With combination:";
 	for (int i = 0; i < combinations.back().size(); i++){
 		if (i != 0){
@@ -1057,7 +1324,7 @@ std::vector<int> Dijkstra(std::vector<std::vector<double>> costmap){
 			std::cout << " " << combinations.back()[i]+1;
 		}
 	}
-	std::cout << std::endl;
+	std::cout << std::endl << std::endl;
 
 	return combinations.back();
 
