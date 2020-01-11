@@ -19,14 +19,21 @@
  
 namespace student {
 
-const bool mission_2 = false;
-const int bonus = 2;	// Bonus time for picking up victim (seconds)
-const double speed = 0.2;	// Robot speed, for calculating travelling times
-							// Should be ~ 0.2 m/s (0.5m/2.5s)
-							
+// - - - - - VARIABLES - - - - -
+
+// Thresholds for resetting tree
+const int max_nodes = 10;
+const int max_loops = 1000;
+
+// RRT* switch
 const bool RRT_STAR = false;
 
-std::ofstream myfile("/home/lar2019/workspace/project/src/nodes.csv");
+// Choose mission & params
+const bool mission_2 = true;
+const int bonus = 5;	// Bonus time for picking up victim (seconds)
+const double speed = 0.2;	// Should be ~ 0.2 m/s (0.5m/2.5s)	
+
+// - - - - - - - - - - - - - - - 
 
 void RRT(const float theta, Path& path, std::vector<Point>& rawPath, const Polygon& borders, int kmax, int npts, const std::vector<Polygon>& obstacle_list, std::vector<double> obs_radius, std::vector<Point> obs_center, double& length_path);
 
@@ -873,21 +880,16 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		int loop_cnt = 1;
 
 		while(goalReached == false){
-		
-		//if (!RRT_STAR){
-		
-		
-			if (loop_cnt == 1000){
-				throw std::runtime_error(" - - - ERROR: Could not converge - - -");				
-			}
-		
-			std::cout << "Loop: " << loop_cnt << std::endl;
-			loop_cnt++;
 		   
 		    //Reset if not found for too long
-		    if(nodes_list.size() > 10){
+		    if(nodes_list.size() > max_nodes or loop_cnt == max_loops){
 		    
-		    	std::cout << "Clearing list" << std::endl;
+		    	if (loop_cnt == max_loops){
+		    		loop_cnt = 1;
+		    		std::cout << "Clearing list: NOT CONVERGING" << std::endl;
+		    	} else {
+		    		std::cout << "Clearing list: TOO MANY NODES" << std::endl;
+		    	}
 		    
 				// Clear lists and keep only 1st element
 		        path_pos l = nodes_list.at(0);
@@ -899,6 +901,14 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		        nodes_list.push_back(l);
 		        paths_list.push_back(lp);         
 		    }
+		    
+		    // Count loops
+		    if (loop_cnt % 100 == 0){
+				std::cout << "Loop: " << loop_cnt << std::endl;
+			}
+			loop_cnt++;
+			
+		if (!RRT_STAR){
 		    
 		    bool rand_clear = false;
 		    int index;
@@ -989,21 +999,13 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		    
 		    if(!collision){
 		        
-		        std::cout << "NO COLLISION" << std::endl;
+		        //std::cout << "NO COLLISION" << std::endl;
 		        
 		        failed_to_reach_goal = false;
 	
 		        path_pos new_node = {};
 		        new_node.x = newPath.points.back().x;
 		        new_node.y = newPath.points.back().y;
-		        
-		        // For plitting nodes
-		        /*if (!myfile.is_open()){
-				    throw std::runtime_error("Cannot open nodes.csv");
-	  			}*/
-	  			
-				myfile << new_node.x << "," << new_node.y << std::endl;
-				// End plotting
 		        
 		        new_node.theta = newPath.points.back().theta;
 		        new_node.pathIndex = nodes_list.size();
@@ -1023,11 +1025,6 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 					goal += 1;
 		        }
 		    }
-		    
-		    if (loop_cnt == 1000){
-		    	goal += 1; 
-				goalReached = true; //TODO: remove
-			}
 
 		    if(goalReached){
 
@@ -1042,46 +1039,16 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 
 		        }
 		    }
-		}
-
-		// Add points to final path
-		path.points.insert(path.points.end(), temp_path.begin(), temp_path.end());
-		temp_path.clear();
-		temp_path.shrink_to_fit();
-
-		for (int i = 0; i < path.points.size()-1; i++){
-			length_path += sqrt(pow(path.points[i].x-path.points[i+1].x,2) + pow(path.points[i].y-path.points[i+1].y,2));
-		}
-
-	}
-	
-	myfile.close();
-
-}
+		    	       
 		    
 		    
-	   //} 
-/*
-	    else {	// - - - - - RRT_STAR - - - - -
+		    
+		    
+		} else {	// - - - - - RRT_STAR - - - - -
 		
-			std::cout << "Loop: " << loop_cnt << std::endl;
-			loop_cnt++;
-		   
-		    //Reset if not found for too long
-		    if(nodes_list.size() > 10){
-		    
-		    	std::cout << "Clearing list" << std::endl;
-		    
-				// Clear lists and keep only 1st element
-		        path_pos l = nodes_list.at(0);
-		        Path lp = paths_list.at(0);
-		        nodes_list.clear();
-		        nodes_list.shrink_to_fit();                                
-		        paths_list.clear();
-		        paths_list.shrink_to_fit();
-		        nodes_list.push_back(l);
-		        paths_list.push_back(lp);         
-		    }
+		
+		
+		
 		    
 		    bool rand_clear = false;
 		    int index;
@@ -1107,27 +1074,9 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		            trying_for_goal = true;
 		        }
 
-		        //RRT Line 5 - Find parent node (closest)
-		        
-			    // Choose parent w/ lowest cost 
-			    
-			    // 1st IMPLEMENTATION
-			    
-			    /*for(int i=0; i<nodes_list.size(); i++){
-			        double dist_points = sqrt(pow((q_rand_x-nodes_list.at(i).x),2)+pow((q_rand_y-nodes_list.at(i).y),2));
-			        if(dist_points+nodes_list.at(i).cost < tmp_cost){
-  						min_dist = dist_points;
-			            index = i;
-			            tmp_cost = dist_points+nodes_list.at(i).cost;
-			        }
-			    }*/
-			    
-			
-/*
-
-				// 2nd IMPLEMENTATION
-			    
+		        //RRT Line 5 - Find parent node (lowest cost)
 			    // TODO: Parent needs to be reachable
+			    
 			    for(int i=0; i<nodes_list.size(); i++){
 			        double dist_points = sqrt(pow((q_rand_x-nodes_list.at(i).x),2)+pow((q_rand_y-nodes_list.at(i).y),2));
 			        if(min_dist > 0.1 and min_dist < 0.4){
@@ -1186,9 +1135,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 				    
 			}
 
-		} // END RRT / RRT_STAR 
-
-		    if(!collision){
+		    /*if(!collision){
 		        
 		        std::cout << "NO COLLISION" << std::endl;
 		        
@@ -1197,14 +1144,6 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		        path_pos new_node = {};
 		        new_node.x = newPath.points.back().x;
 		        new_node.y = newPath.points.back().y;
-		        
-		        // For plitting nodes
-		        //if (!myfile.is_open()){
-				//    throw std::runtime_error("Cannot open nodes.csv");
-	  			//}
-	  			
-				myfile << new_node.x << "," << new_node.y << std::endl;
-				// End plotting
 		        
 		        new_node.theta = newPath.points.back().theta;
 		        new_node.pathIndex = nodes_list.size();
@@ -1215,24 +1154,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		        
 		        nodes_list.push_back(new_node);
 		        paths_list.push_back(newPath);
-		        
-		        /*if (RRT_STAR){
-				    // Rewriting
-				    for(int i=0; i<nodes_list.size(); i++){
-				        double dist_points = sqrt(pow((new_node.x-nodes_list.at(i).x),2)+pow((new_node.y-nodes_list.at(i).y),2));
-				        // Check if lower cost parent exists
-				        if(dist_points+new_node.cost < nodes_list.at(i).cost){
-				        	std::cout << "Rewriting node" << std::endl;
-				        	// Update node data
-				        	nodes_list.at(i).theta = compute_angle(Point(new_node.x, new_node.y), Point(nodes_list.at(i).x, nodes_list.at(i).y));
-				        	// PathIndex remains the same - Was added before
-				            nodes_list.at(i).parentIndex = nodes_list.size()-1;
-				            nodes_list.at(i).cost = dist_points+new_node.cost;
-				        }
-				    }
-				}*/
 
-/*
 		        //RRT Line 9 - Check if goal reached
 		        if(sqrt(pow((new_node.x - rawPath.at(goal).x),2)+pow((new_node.y - rawPath.at(goal).y),2)) < 0.1){
 		            
@@ -1240,12 +1162,13 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		            std::cout << "Goal " << goal << " reached" << std::endl;
 					goal += 1;
 		        }
-		    }
+		    }*/
 		    
-		    if (loop_cnt == 1000){
-		    	goal += 1; 
-				goalReached = true; //TODO: remove
-			}
+		    // Plot wherever you got to
+		    //if (loop_cnt == 1000){
+		    //	goal += 1; 
+			//	goalReached = true; //TODO: remove
+			//}
 
 		    if(goalReached){
 
@@ -1260,7 +1183,11 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 
 		        }
 		    }
-		}
+		    
+		    
+   		} // END RRT / RRT_STAR  
+		    
+		} // Goal reached
 
 		// Add points to final path
 		path.points.insert(path.points.end(), temp_path.begin(), temp_path.end());
@@ -1272,10 +1199,8 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		}
 
 	}
-	
-	myfile.close();
 
-}*/
+}
 
 // Dijkstra's Algorithm - To solve best cost to goal
 std::vector<int> Dijkstra(std::vector<std::vector<double>> costmap){
