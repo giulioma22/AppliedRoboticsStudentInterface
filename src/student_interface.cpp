@@ -29,7 +29,7 @@ const int max_loops = 2000;
 const bool RRT_STAR = true;
 
 // Choose mission & params
-const bool mission_2 = false;
+const bool mission_2 = true;
 const int bonus = 2;	// Bonus time for picking up victim (seconds)
 const double speed = 0.2;	// Should be ~ 0.2 m/s (0.5m/2.5s)	
 
@@ -37,7 +37,7 @@ const double speed = 0.2;	// Should be ~ 0.2 m/s (0.5m/2.5s)
 
 void RRT(const float theta, Path& path, std::vector<Point>& rawPath, const Polygon& borders, int kmax, int npts, const std::vector<Polygon>& obstacle_list, std::vector<double> obs_radius, std::vector<Point> obs_center, double& length_path);
 
-std::vector<int> Dijkstra(std::vector<std::vector<double>> costmap);
+std::vector<int> Dijkstra(std::vector<std::vector<double>> costmap, const std::vector<std::pair<int,Polygon>>& victim_list);
 
 bool sort_pair(const std::pair<int,Polygon>& a, const std::pair<int,Polygon>& b);
 
@@ -311,7 +311,10 @@ static bool state = false;
     cv::Mat green_mask_gate;    
     //cv::inRange(hsv_img, cv::Scalar(50, 80, 34), cv::Scalar(75, 255, 255), green_mask_gate);
     //cv::inRange(hsv_img, cv::Scalar(13, 68, 41), cv::Scalar(86, 255, 80), green_mask_gate);
-    cv::inRange(hsv_img, cv::Scalar(15, 65, 40), cv::Scalar(85, 255, 95), green_mask_gate);
+    //cv::inRange(hsv_img, cv::Scalar(15, 65, 40), cv::Scalar(85, 255, 95), green_mask_gate);
+    // Dark w/ light
+    cv::inRange(hsv_img, cv::Scalar(35, 50, 25), cv::Scalar(85, 255, 95), green_mask_gate);
+
    
     // Find green regions - GATE
     std::vector<std::vector<cv::Point>> contours, contours_approx;
@@ -338,7 +341,7 @@ static bool state = false;
  
     for(auto& contour : contours){
       // Approximate polygon w/ fewer vertices if not precise
-      approxPolyDP(contour, approx_curve, 30, true);
+      approxPolyDP(contour, approx_curve, 10, true);
       if (approx_curve.size() != 4) continue;
       for (const auto& pt: approx_curve) {
         // Store (scaled) values of gate
@@ -367,7 +370,8 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
   }
  
   const double MIN_AREA_SIZE = 100;
-  std::string template_folder = "/home/lar2019/workspace/project/template/";
+  //std::string template_folder = "/home/lar2019/workspace/project/template/";
+  std::string template_folder = "/home/robotics/workspace/group_5/template/"; // TODO: Uncomment
 
   bool detect_green_victims(const cv::Mat& hsv_img, const double scale, std::vector<std::pair<int,Polygon>>& victim_list){
    
@@ -377,8 +381,10 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
     // store a binary image in green_mask where the white pixel are those contained in HSV rage (x,x,x) --> (y,y,y)
     //cv::inRange(hsv_img, cv::Scalar(50, 80, 34), cv::Scalar(75, 255, 255), green_mask_victims); //Simulator
     //cv::inRange(hsv_img, cv::Scalar(13, 68, 41), cv::Scalar(86, 255, 80), green_mask_victims);
-    cv::inRange(hsv_img, cv::Scalar(15, 65, 40), cv::Scalar(85, 255, 95), green_mask_victims);
- 
+    //cv::inRange(hsv_img, cv::Scalar(15, 65, 40), cv::Scalar(85, 255, 95), green_mask_victims);
+    // Dark w/ light
+ 	cv::inRange(hsv_img, cv::Scalar(35, 50, 25), cv::Scalar(85, 255, 95), green_mask_victims);
+
     // Apply some filtering
     // Create the kernel of the filter i.e. a rectangle with dimension 3x3
     cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size((1*2) + 1, (1*2)+1));
@@ -509,8 +515,11 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
     cv::Mat blue_mask;    
     //cv::inRange(hsv_img, cv::Scalar(200, 80, 20), cv::Scalar(220, 220, 225), blue_mask);
     //cv::inRange(hsv_img, cv::Scalar(92, 80, 50), cv::Scalar(145, 255, 255), blue_mask);
-    cv::inRange(hsv_img, cv::Scalar(100, 75, 45), cv::Scalar(145, 255, 225), blue_mask);
- 
+    //cv::inRange(hsv_img, cv::Scalar(100, 75, 45), cv::Scalar(145, 255, 225), blue_mask);
+ 	// Dark w/ light
+    cv::inRange(hsv_img, cv::Scalar(75, 35, 45), cv::Scalar(145, 255, 225), blue_mask);
+
+
  
     // Process blue mask
     std::vector<std::vector<cv::Point>> contours, contours_approx;
@@ -794,7 +803,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		}
 		
 		// Find best cost path
-		std::vector<int> best_conf = Dijkstra(costmap);
+		std::vector<int> best_conf = Dijkstra(costmap, victim_list);
 		
 		rawPath.push_back(Point(x,y));
 		for (int i = 0; i < best_conf.size(); i++){
@@ -804,7 +813,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		
 		double length_path = 0;
 		
-		RRT(0, path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, length_path);	//TODO: Change 0 to theta
+		RRT(theta, path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, length_path);	//TODO: Change 0 to theta
 
   	}	// End mission 2
        
@@ -859,7 +868,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		if(goal == 1){
 		    first_node.x = rawPath[0].x;
 		    first_node.y = rawPath[0].y;
-		    first_node.theta = 0; // TODO: Change theta or 0;
+		    first_node.theta = theta; // TODO: Change theta or 0;
 		}
 		//If not goal = 1, take the last position in Path
 		else{
@@ -1218,8 +1227,6 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		for (int i = 0; i < path.points.size()-1; i++){
 			length_path += sqrt(pow(path.points[i].x-path.points[i+1].x,2) + pow(path.points[i].y-path.points[i+1].y,2));
 			
-			//if (goal == 4){return;}	//TODO:remove
-			
 		}
 
 	}
@@ -1227,15 +1234,17 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 }
 
 // Dijkstra's Algorithm - To solve best cost to goal
-std::vector<int> Dijkstra(std::vector<std::vector<double>> costmap){
+std::vector<int> Dijkstra(std::vector<std::vector<double>> costmap, const std::vector<std::pair<int,Polygon>>& victim_list){
 
 	std::vector<double> best_cost(costmap.size());
 	std::vector<std::vector<int>> combinations(costmap.size()); 
 
 	for (int i = 0; i < costmap.size(); i++){ 			// Row
 		for (int j = 0; j < costmap.size()-i; j++){		// Column
+			// Initially, best cost is first row
 			if (i == 0){
 				best_cost[j] = costmap[i][j];
+			// Then it is updated only if better cost
 			} else if (costmap[i][j+i] + best_cost[i-1] < best_cost[j+i]){
 				
 				best_cost[j+i] = costmap[i][j+i] + best_cost[i-1];
@@ -1253,9 +1262,9 @@ std::vector<int> Dijkstra(std::vector<std::vector<double>> costmap){
 				combinations[j+i].push_back(i-1);
 				
 				// PRINT
-				std::cout << "Combination at " << i << ", " << j+i << ": ";
+				std::cout << "Combination at " << i << "," << j+i << " : ";
 				for (int k = 0; k < combinations[j+i].size(); k++){
-					std::cout << combinations[j+i][k]+1 <<  " ";
+					std::cout << std::get<0>(victim_list[combinations[j+i][k]]) <<  " ";
 				}
 				std::cout << std::endl;
 				
@@ -1268,9 +1277,9 @@ std::vector<int> Dijkstra(std::vector<std::vector<double>> costmap){
 	std::cout << "With combination:";
 	for (int i = 0; i < combinations.back().size(); i++){
 		if (i != 0){
-			std::cout << ", " << combinations.back()[i]+1; 
+			std::cout << ", " << std::get<0>(victim_list[combinations.back()[i]]); 
 		} else {
-			std::cout << " " << combinations.back()[i]+1;
+			std::cout << " " << std::get<0>(victim_list[combinations.back()[i]]);
 		}
 	}
 	std::cout << std::endl << std::endl;
@@ -1288,10 +1297,6 @@ bool sort_pair(const std::pair<int,Polygon>& a, const std::pair<int,Polygon>& b)
 double compute_angle(Point a, Point b){
 	
   	double angle = atan2(fabs(a.y - b.y), fabs(a.x - b.x));
-  		
-  	/*if (b.y < a.y){
-  		angle = -angle;
-    }*/	
   	
   	if (b.x > a.x and b.y < a.y){
   		angle = -angle;
