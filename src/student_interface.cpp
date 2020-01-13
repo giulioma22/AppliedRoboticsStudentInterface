@@ -22,15 +22,15 @@ namespace student {
 // - - - - - VARIABLES - - - - -
 
 // Thresholds for resetting tree
-const int max_nodes = 10;
-const int max_loops = 1000;
+const int max_nodes = 100;	//TODO: change
+const int max_loops = 2000;
 
 // RRT* switch
-const bool RRT_STAR = false;
+const bool RRT_STAR = true;
 
 // Choose mission & params
-const bool mission_2 = true;
-const int bonus = 5;	// Bonus time for picking up victim (seconds)
+const bool mission_2 = false;
+const int bonus = 2;	// Bonus time for picking up victim (seconds)
 const double speed = 0.2;	// Should be ~ 0.2 m/s (0.5m/2.5s)	
 
 // - - - - - - - - - - - - - - - 
@@ -368,6 +368,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
  
   const double MIN_AREA_SIZE = 100;
   std::string template_folder = "/home/lar2019/workspace/project/template/";
+
   bool detect_green_victims(const cv::Mat& hsv_img, const double scale, std::vector<std::pair<int,Polygon>>& victim_list){
    
     // Find green regions
@@ -404,7 +405,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
       if (area < MIN_AREA_SIZE) continue; // filter too small contours to remove false positives
 
       std::vector<cv::Point> approx_curve;
-      approxPolyDP(contours[i], approx_curve, 1, true);
+      approxPolyDP(contours[i], approx_curve, 10, true);
       if(approx_curve.size() < 6) continue; //fitler out the gate
      
       Polygon scaled_contour;
@@ -849,6 +850,9 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 	bool trying_for_goal = false;
 
 	while(goal < rawPath.size()){
+	
+		double best_goal_cost = 100000;	//TODO: remove
+		path_pos best_goal_pos = {};	
 
 		std::cout << "Current goal: " << goal << std::endl;
 		nodes_list.clear();
@@ -878,6 +882,8 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		//RRT Line 2 - Reach each major point (rawPath)
 		bool goalReached = false;
 		int loop_cnt = 1;
+		
+		bool atLeastOneFound = false; //TODO: remove
 
 		while(goalReached == false){
 		   
@@ -886,9 +892,9 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		    
 		    	if (loop_cnt == max_loops){
 		    		loop_cnt = 1;
-		    		std::cout << "Clearing list: NOT CONVERGING" << std::endl;
+		    		std::cout << "Resetting: NOT CONVERGING" << std::endl;
 		    	} else {
-		    		std::cout << "Clearing list: TOO MANY NODES" << std::endl;
+		    		std::cout << "Resetting: TOO MANY NODES" << std::endl;
 		    	}
 		    
 				// Clear lists and keep only 1st element
@@ -908,18 +914,20 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 			}
 			loop_cnt++;
 			
+			
+		// - - - RRT or RRT* - - -
+		
 		if (!RRT_STAR){
 		    
 		    bool rand_clear = false;
 		    int index;
-		    double min_dist, tmp_cost;
+		    double min_dist;
 
 		    //RRT Line 3 & 4 - Compute next random point
 		    while(!rand_clear){
 		    	
 		    	index = 0;
 		        min_dist = 1000;
-		        tmp_cost = 100000;
 
 		        samp_X = rand()%(MAX_X-MIN_X+1)+MIN_X;
 		        samp_Y = rand()%(MAX_Y-MIN_Y+1)+MIN_Y;
@@ -1012,7 +1020,6 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 
 		        //RRT Line 8
 		        new_node.parentIndex = index;
-		        new_node.cost = tmp_cost;
 		        
 		        nodes_list.push_back(new_node);
 		        paths_list.push_back(newPath);
@@ -1050,119 +1057,135 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		
 		
 		    
-		    bool rand_clear = false;
-		    int index;
-		    double min_dist, tmp_cost;
+		    int index = 0;
+		    double tmp_cost = 100000;
+		    double best_x = 0;
+		    double best_y = 0;
+		    double best_theta = 0;
+		    Path best_path = {};
 
 		    //RRT Line 3 & 4 - Compute next random point
-		    while(!rand_clear){
-		    	
-		    	index = 0;
-		        min_dist = 1000;
-		        tmp_cost = 100000;
 
-		        samp_X = rand()%(MAX_X-MIN_X+1)+MIN_X;
-		        samp_Y = rand()%(MAX_Y-MIN_Y+1)+MIN_Y;
+	        samp_X = rand()%(MAX_X-MIN_X+1)+MIN_X;
+	        samp_Y = rand()%(MAX_Y-MIN_Y+1)+MIN_Y;
 
-		        q_rand_x = samp_X/100.00;
-		        q_rand_y = samp_Y/100.00;
-		        rand_count += 1;
+	        q_rand_x = samp_X/100.00;
+	        q_rand_y = samp_Y/100.00;
+	        rand_count += 1;
 
-		        if (rand_count % 2 == 0){	// 50% of times next goal
-		            q_rand_x =  rawPath[goal].x;
-		            q_rand_y =  rawPath[goal].y;
-		            trying_for_goal = true;
-		        }
+	        if (rand_count % 2 == 0){	// 50% of times next goal
+	            q_rand_x =  rawPath[goal].x;
+	            q_rand_y =  rawPath[goal].y;
+	            trying_for_goal = true;
+	        }
 
-		        //RRT Line 5 - Find parent node (lowest cost)
-			    // TODO: Parent needs to be reachable
-			    
-			    for(int i=0; i<nodes_list.size(); i++){
-			        double dist_points = sqrt(pow((q_rand_x-nodes_list.at(i).x),2)+pow((q_rand_y-nodes_list.at(i).y),2));
-			        if(min_dist > 0.1 and min_dist < 0.4){
+	        //RRT Line 5 - Find parent node (lowest cost)
+		    // TODO: Parent needs to be reachable
+		    
+		    for(int i=0; i<nodes_list.size(); i++){
+		    
+		        double dist_points = sqrt(pow((q_rand_x-nodes_list.at(i).x),2)+pow((q_rand_y-nodes_list.at(i).y),2));
+		        
+		        if(dist_points > 0.1 and dist_points < 0.4){
 			        
-		double ANGLE = 0.0;
+					double ANGLE = 0.0;
 
-		// If going to next goal and not last goal
-		if (q_rand_x == rawPath[goal].x and q_rand_y == rawPath[goal].y and rawPath.size() != goal+1){
-			ANGLE = compute_angle(Point(nodes_list.at(index).x,nodes_list.at(index).y), rawPath[goal+1]);
-		// If point before next goal or next goal is last
-		} else {
-			ANGLE = compute_angle(Point(nodes_list.at(index).x,nodes_list.at(index).y), rawPath[goal]);
-		}
+					// If going to next (not last) goal
+					if (q_rand_x == rawPath[goal].x and q_rand_y == rawPath[goal].y and rawPath.size() != goal+1){
+						ANGLE = compute_angle(Point(nodes_list.at(index).x,nodes_list.at(index).y), rawPath[goal+1]);
+					// If point before next goal or next goal is last
+					} else {
+						ANGLE = compute_angle(Point(nodes_list.at(index).x,nodes_list.at(index).y), rawPath[goal]);
+					}
 				
-		Path newPath;
-		dubinsCurve dubins = {};
+					// Loop to use different final angles 
+					for (int ang = 0; ang < 3; ang++){
 
-		// Finding a path from one initial point to goal
-		dubins_shortest_path(dubins, nodes_list.at(i).x, nodes_list.at(i).y, nodes_list.at(i).theta, q_rand_x, q_rand_y, ANGLE, kmax);
+						ANGLE += (ang-1)*0.5236; 	// +/- 30°
+				
+						Path newPath;
+						dubinsCurve dubins = {};
 
-		// Dicretize the 3 arcs
-		discretize_arc(dubins.arc_1, s, npts, newPath); // Arc 1
-		discretize_arc(dubins.arc_2, s, npts, newPath); // Arc 2
-		discretize_arc(dubins.arc_3, s, npts, newPath); // Arc 3
+						// Finding a path from one initial point to goal
+						dubins_shortest_path(dubins, nodes_list.at(i).x, nodes_list.at(i).y, nodes_list.at(i).theta, q_rand_x, q_rand_y, ANGLE, kmax);
 
-		bool collision = false;
+						// Dicretize the 3 arcs
+						discretize_arc(dubins.arc_1, s, npts, newPath); // Arc 1
+						discretize_arc(dubins.arc_2, s, npts, newPath); // Arc 2
+						discretize_arc(dubins.arc_3, s, npts, newPath); // Arc 3
 
-		// Check arena borders
-		for(int j=0; j<newPath.points.size(); j++){
-			if(newPath.points.at(j).x < (borders[0].x + 0.02) or newPath.points.at(j).x > (borders[1].x - 0.02) or newPath.points.at(j).y < (borders[0].y + 0.02)  or newPath.points.at(j).y > (borders[3].y - 0.02)){
-				collision = true;
-				if(trying_for_goal){failed_to_reach_goal = true; trying_for_goal = false;}        
-				break; 
-			}
+						bool collision = false;
 
-			// Check obstacle collisions
-			for(int i=0; i<obstacle_list.size(); i++){
-				double dist_to_ob = sqrt(pow((newPath.points.at(j).x-obs_center.at(i).x),2)+pow((newPath.points.at(j).y-obs_center.at(i).y),2));
-				double result = insidePolygon(obstacle_list.at(i), Point(newPath.points.at(j).x,newPath.points.at(j).y)); // Possibly useless, since we check the radius of the obstacle anyways
-			   
-				if(result != 1 or dist_to_ob < (obs_radius.at(i)+0.04)){
-					collision = true;
-					if(trying_for_goal){failed_to_reach_goal = true;trying_for_goal = false;}
-					break; 
-				}
-			}
-		} // End collission check
+						// Check arena borders
+						for(int j=0; j<newPath.points.size(); j++){
+							if(newPath.points.at(j).x < (borders[0].x + 0.02) or newPath.points.at(j).x > (borders[1].x - 0.02) or newPath.points.at(j).y < (borders[0].y + 0.02)  or newPath.points.at(j).y > (borders[3].y - 0.02)){
+								collision = true;
+								if(trying_for_goal){failed_to_reach_goal = true; trying_for_goal = false;}        
+								break; 
+							}
+
+							// Check obstacle collisions
+							for(int k=0; k<obstacle_list.size(); k++){
+								double dist_to_ob = sqrt(pow((newPath.points.at(j).x-obs_center.at(k).x),2)+pow((newPath.points.at(j).y-obs_center.at(k).y),2));
+								double result = insidePolygon(obstacle_list.at(k), Point(newPath.points.at(j).x,newPath.points.at(j).y)); // Possibly useless, since we check the radius of the obstacle anyways
+							   
+								if(result != 1 or dist_to_ob < (obs_radius.at(k)+0.04)){
+									collision = true;
+									if(trying_for_goal){failed_to_reach_goal = true;trying_for_goal = false;}
+									break; 
+								}
+							}
+						} // End collision check
+					    
+				    	if (!collision and dubins.L < 0.5 and dubins.L + nodes_list.at(i).cost < tmp_cost){ //TODO: remove dubins.L < 0.5
+						    index = i;        
+						    tmp_cost = dubins.L + nodes_list.at(i).cost;
+						    best_x = newPath.points.back().x;
+						    best_y = newPath.points.back().y;
+						    best_theta = newPath.points.back().theta;
+						    best_path = newPath;
+						}
+						
+					} // End angle variations
+		            
+		        } // End if condition (distance)
+		        
+			} // End loop parent search
+		    
+		    if (tmp_cost < 100000){	// If a parent was found basically
+		    
+		    	failed_to_reach_goal = false;
+		    	
+		    	std::cout << "New node" << std::endl;
+	
+				path_pos new_node = {};
+				new_node.x = best_x;
+				new_node.y = best_y;
+			
+				new_node.theta = best_theta;
+				new_node.pathIndex = nodes_list.size();
+
+				//RRT Line 8
+				new_node.parentIndex = index;
+				new_node.cost = tmp_cost;
+			
+				nodes_list.push_back(new_node);
+				paths_list.push_back(best_path);
+
+				//RRT Line 9 - Check if goal reached
+			    if(sqrt(pow((new_node.x - rawPath.at(goal).x),2)+pow((new_node.y - rawPath.at(goal).y),2)) < 0.1){	//TODO: adjusted from 0.1
 			        
+			        //goalReached = true;
+			        atLeastOneFound = true; // TODO: remove
+			        std::cout << "Goal " << goal << " reached" << std::endl;
 			        
-			            //min_dist = dist_points;
-			            //index = i;
-			            //tmp_cost = dist_points+nodes_list.at(i).cost;
+			        if(tmp_cost < best_goal_cost){
+			        	best_goal_cost = tmp_cost;
+			        	best_goal_pos = nodes_list.back();
 			        }
 			        
-				}
-				    
+			    }
 			}
-
-		    /*if(!collision){
-		        
-		        std::cout << "NO COLLISION" << std::endl;
-		        
-		        failed_to_reach_goal = false;
-	
-		        path_pos new_node = {};
-		        new_node.x = newPath.points.back().x;
-		        new_node.y = newPath.points.back().y;
-		        
-		        new_node.theta = newPath.points.back().theta;
-		        new_node.pathIndex = nodes_list.size();
-
-		        //RRT Line 8
-		        new_node.parentIndex = index;
-		        new_node.cost = tmp_cost;
-		        
-		        nodes_list.push_back(new_node);
-		        paths_list.push_back(newPath);
-
-		        //RRT Line 9 - Check if goal reached
-		        if(sqrt(pow((new_node.x - rawPath.at(goal).x),2)+pow((new_node.y - rawPath.at(goal).y),2)) < 0.1){
-		            
-		            goalReached = true;
-		            std::cout << "Goal " << goal << " reached" << std::endl;
-					goal += 1;
-		        }
-		    }*/
 		    
 		    // Plot wherever you got to
 		    //if (loop_cnt == 1000){
@@ -1170,9 +1193,12 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 			//	goalReached = true; //TODO: remove
 			//}
 
-		    if(goalReached){
+		    //if(goalReached){
+		    if(atLeastOneFound and (nodes_list.size() > 20 or loop_cnt == 1000)){	// TODO: remove
 
-		        path_pos pos = nodes_list.back();
+		        path_pos pos = best_goal_pos;
+		        goalReached = true;
+		        goal += 1;
 	   
 		        while(pos.pathIndex != 0){
 		            
@@ -1196,6 +1222,9 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 
 		for (int i = 0; i < path.points.size()-1; i++){
 			length_path += sqrt(pow(path.points[i].x-path.points[i+1].x,2) + pow(path.points[i].y-path.points[i+1].y,2));
+			
+			if (goal == 4){return;}	//TODO:remove
+			
 		}
 
 	}
@@ -1209,7 +1238,7 @@ std::vector<int> Dijkstra(std::vector<std::vector<double>> costmap){
 	std::vector<std::vector<int>> combinations(costmap.size()); 
 
 	for (int i = 0; i < costmap.size(); i++){ 			// Row
-		for (int j = 0; j < costmap.size()-i; j++){		//Column
+		for (int j = 0; j < costmap.size()-i; j++){		// Column
 			if (i == 0){
 				best_cost[j] = costmap[i][j];
 			} else if (costmap[i][j+i] + best_cost[i-1] < best_cost[j+i]){
