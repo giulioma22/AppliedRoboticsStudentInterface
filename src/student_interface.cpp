@@ -726,16 +726,11 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		    rawPath.push_back(victim_center[i]);
 		}
 		rawPath.push_back(Point(gateX, gateY));
-		
-		//rawPath.push_back(victim_center[2]);;
-		//rawPath.push_back(victim_center[3]);	//TODO: Remove
 
 		double length_path = 0;
 
 		// Call planning algorithm
 		RRT(theta, path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, length_path);
-		
-		//RRT(compute_angle(victim_center[1],victim_center[3]), path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, length_path);	//TODO: Remove
 
 	} else {
 	
@@ -809,7 +804,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		
 		double length_path = 0;
 		
-		RRT(0, path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, length_path);	//TODO: Switch 0 to theta
+		RRT(0, path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, length_path);	//TODO: Change 0 to theta
 
   	}	// End mission 2
        
@@ -864,7 +859,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		if(goal == 1){
 		    first_node.x = rawPath[0].x;
 		    first_node.y = rawPath[0].y;
-		    first_node.theta = 0; // TODO: theta or 0;
+		    first_node.theta = 0; // TODO: Change theta or 0;
 		}
 		//If not goal = 1, take the last position in Path
 		else{
@@ -892,7 +887,9 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		    
 		    	if (loop_cnt == max_loops){
 		    		loop_cnt = 1;
-		    		std::cout << "Resetting: NOT CONVERGING" << std::endl;
+		    		//std::cout << "Resetting: NOT CONVERGING" << std::endl;
+		    		// TODO: remove to not exit code
+		    		throw std::runtime_error("Resetting: NOT CONVERGING");
 		    	} else {
 		    		std::cout << "Resetting: TOO MANY NODES" << std::endl;
 		    	}
@@ -1080,7 +1077,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 	        }
 
 	        //RRT Line 5 - Find parent node (lowest cost)
-		    // TODO: Parent needs to be reachable
+		    // Make sure able to reach parent
 		    
 		    for(int i=0; i<nodes_list.size(); i++){
 		    
@@ -1100,8 +1097,12 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 				
 					// Loop to use different final angles 
 					for (int ang = 0; ang < 3; ang++){
-
-						ANGLE += (ang-1)*0.5236; 	// +/- 30°
+						
+						ANGLE += (ang-1)*0.349; 	// +/- 20°
+						
+						/*if (!(q_rand_x == rawPath[goal].x and q_rand_y == rawPath[goal].y)){
+							ANGLE += (ang-1)*0.349; 	// +/- 20°
+						}*/	// TODO: remove
 				
 						Path newPath;
 						dubinsCurve dubins = {};
@@ -1186,15 +1187,9 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 			        
 			    }
 			}
-		    
-		    // Plot wherever you got to
-		    //if (loop_cnt == 1000){
-		    //	goal += 1; 
-			//	goalReached = true; //TODO: remove
-			//}
 
 		    //if(goalReached){
-		    if(atLeastOneFound and (nodes_list.size() > 20 or loop_cnt == 1000)){	// TODO: remove
+		    if(atLeastOneFound and (nodes_list.size() > 20 or loop_cnt == 1000)){	// Add to path if we reached the goal at least once
 
 		        path_pos pos = best_goal_pos;
 		        goalReached = true;
@@ -1223,7 +1218,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		for (int i = 0; i < path.points.size()-1; i++){
 			length_path += sqrt(pow(path.points[i].x-path.points[i+1].x,2) + pow(path.points[i].y-path.points[i+1].y,2));
 			
-			if (goal == 4){return;}	//TODO:remove
+			//if (goal == 4){return;}	//TODO:remove
 			
 		}
 
