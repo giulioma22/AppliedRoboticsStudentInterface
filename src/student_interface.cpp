@@ -23,7 +23,7 @@ namespace student {
 
 // Thresholds for resetting tree
 const int max_nodes = 100;	//TODO: change
-const int max_loops = 2000;
+const int max_loops = 5000;
 
 // RRT* switch
 const bool RRT_STAR = true;
@@ -284,7 +284,7 @@ static bool state = false;
  
         co.AddPath(srcPoly, ClipperLib::jtSquare, ClipperLib::etClosedPolygon);
  
-        co.Execute(newPoly, 40);    // Int is obstacle inflation idx
+        co.Execute(newPoly, 45);    // Int is obstacle inflation idx
  
         for (const ClipperLib::Path &path: newPoly){
             // Obstacle obst = create data structure for current obstacle...
@@ -517,7 +517,9 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
     //cv::inRange(hsv_img, cv::Scalar(92, 80, 50), cv::Scalar(145, 255, 255), blue_mask);
     //cv::inRange(hsv_img, cv::Scalar(100, 75, 45), cv::Scalar(145, 255, 225), blue_mask);
  	// Dark w/ light
-    cv::inRange(hsv_img, cv::Scalar(75, 35, 45), cv::Scalar(145, 255, 225), blue_mask);
+    //cv::inRange(hsv_img, cv::Scalar(75, 35, 45), cv::Scalar(145, 255, 225), blue_mask);
+    // Bright w/ light
+    cv::inRange(hsv_img, cv::Scalar(90, 90, 45), cv::Scalar(150, 255, 225), blue_mask);
 
 
  
@@ -531,7 +533,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
     for (int i=0; i<contours.size(); ++i)
     {
       // Approximate polygon w/ fewer vertices if not precise
-      cv::approxPolyDP(contours[i], approx_curve, 30, true);
+      cv::approxPolyDP(contours[i], approx_curve, 10, true);	//TODO: change epsilon = 30
       if (approx_curve.size() != 3) continue;
       robot_found = true;
       break;
@@ -740,6 +742,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 
 		// Call planning algorithm
 		RRT(theta, path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, length_path);
+
 
 	} else {
 	
@@ -1080,6 +1083,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 	        rand_count += 1;
 
 	        if (rand_count % 2 == 0){	// 50% of times next goal
+	        //if (rand_count % 2 == 0 and !atLeastOneFound){ //TODO: remove
 	            q_rand_x =  rawPath[goal].x;
 	            q_rand_y =  rawPath[goal].y;
 	            trying_for_goal = true;
@@ -1092,7 +1096,8 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		    
 		        double dist_points = sqrt(pow((q_rand_x-nodes_list.at(i).x),2)+pow((q_rand_y-nodes_list.at(i).y),2));
 		        
-		        if(dist_points > 0.1 and dist_points < 0.4){
+		       	if(dist_points > 0.1){
+		       	//if(dist_points > 0.1 and dist_points < 0.4){	//TODO: remove max dist
 			        
 					double ANGLE = 0.0;
 
@@ -1104,7 +1109,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 						ANGLE = compute_angle(Point(nodes_list.at(index).x,nodes_list.at(index).y), rawPath[goal]);
 					}
 				
-					// Loop to use different final angles 
+					// Loop to use different arrival angles 
 					for (int ang = 0; ang < 3; ang++){
 						
 						ANGLE += (ang-1)*0.349; 	// +/- 20°
@@ -1147,7 +1152,9 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 							}
 						} // End collision check
 					    
-				    	if (!collision and dubins.L < 0.5 and dubins.L + nodes_list.at(i).cost < tmp_cost){ //TODO: remove dubins.L < 0.5
+					    // Update if not collision and better cost
+					    if (!collision and dubins.L + nodes_list.at(i).cost < tmp_cost){
+				    	//if (!collision and dubins.L < 0.5 and dubins.L + nodes_list.at(i).cost < tmp_cost){ //TODO: remove max dist
 						    index = i;        
 						    tmp_cost = dubins.L + nodes_list.at(i).cost;
 						    best_x = newPath.points.back().x;
@@ -1198,7 +1205,8 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 			}
 
 		    //if(goalReached){
-		    if(atLeastOneFound and (nodes_list.size() > 20 or loop_cnt == 1000)){	// Add to path if we reached the goal at least once
+		    if(atLeastOneFound and (nodes_list.size() > 20 or loop_cnt == 1000)){		// TODO: remove max nodes
+		    //if(atLeastOneFound and (nodes_list.size() > 100 or loop_cnt == 3000)){	// Add to path if we reached the goal at least once
 
 		        path_pos pos = best_goal_pos;
 		        goalReached = true;
