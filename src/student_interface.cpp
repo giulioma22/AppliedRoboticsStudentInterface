@@ -29,13 +29,13 @@ const int max_loops = 5000;
 const bool RRT_STAR = true;
 
 // Choose mission & params
-const bool mission_2 = true;
+const bool mission_2 = false;
 const int bonus = 2;	// Bonus time for picking up victim (seconds)
 const double speed = 0.2;	// Should be ~ 0.2 m/s (0.5m/2.5s)	
 
 // - - - - - - - - - - - - - - - 
 
-void RRT(const float theta, Path& path, std::vector<Point>& rawPath, const Polygon& borders, int kmax, int npts, const std::vector<Polygon>& obstacle_list, std::vector<double> obs_radius, std::vector<Point> obs_center, double& length_path);
+void RRT(const float theta, Path& path, std::vector<Point>& rawPath, const Polygon& borders, int kmax, int npts, const std::vector<Polygon>& obstacle_list, std::vector<double> obs_radius, std::vector<Point> obs_center, double& length_path, const std::vector<double> gateInfo);
 
 std::vector<int> Dijkstra(std::vector<std::vector<double>> costmap, const std::vector<std::pair<int,Polygon>>& victim_list);
 
@@ -284,7 +284,7 @@ static bool state = false;
  
         co.AddPath(srcPoly, ClipperLib::jtSquare, ClipperLib::etClosedPolygon);
  
-        co.Execute(newPoly, 45);    // Int is obstacle inflation idx
+        co.Execute(newPoly, 50);    // TOTO: Change obstacle inflation idx
  
         for (const ClipperLib::Path &path: newPoly){
             // Obstacle obst = create data structure for current obstacle...
@@ -674,6 +674,8 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
         gateTh = acos(fabs(gate[1].x-gate[2].x) / dist_1);
     }
 
+    std::vector<double> gateInfo = {gateX, gateY, gateTh};
+
     //  - - - VICTIM CENTER - - -
     std::vector<Point> victim_center;
     double victim_X;
@@ -741,7 +743,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		double length_path = 0;
 
 		// Call planning algorithm
-		RRT(theta, path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, length_path);
+		RRT(theta, path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, length_path, gateInfo);
 
 
 	} else {
@@ -775,11 +777,12 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 					rawPath.push_back(victim_center[i+j]);
 				}
 
+				// TODO: Make it so that angle can vary at beginning
 				double temp_theta = compute_angle(rawPath[0],rawPath[1]);
 				double length_path = 0;			
 
 				// Call planning algorithm
-				RRT(temp_theta, path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, length_path);
+				RRT(temp_theta, path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, length_path, gateInfo);
 
 				// Add time cost to costmap
 				costmap[i][i+j] = length_path/speed;
@@ -816,7 +819,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		
 		double length_path = 0;
 		
-		RRT(theta, path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, length_path);	//TODO: Change 0 to theta
+		RRT(theta, path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, length_path, gateInfo);	//TODO: Change 0 to theta
 
   	}	// End mission 2
        
@@ -828,7 +831,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 
 
 
-  void RRT(const float theta, Path& path, std::vector<Point>& rawPath, const Polygon& borders, int kmax, int npts, const std::vector<Polygon>& obstacle_list, std::vector<double> obs_radius, std::vector<Point> obs_center, double& length_path){
+  void RRT(const float theta, Path& path, std::vector<Point>& rawPath, const Polygon& borders, int kmax, int npts, const std::vector<Polygon>& obstacle_list, std::vector<double> obs_radius, std::vector<Point> obs_center, double& length_path, const std::vector<double> gateInfo){
 
 	//List of all current nodes
 	std::vector<path_pos> nodes_list;
@@ -973,6 +976,9 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		    // If going to next goal and not last goal
 		    if (q_rand_x == rawPath[goal].x and q_rand_y == rawPath[goal].y and rawPath.size() != goal+1){
 		    	ANGLE = compute_angle(Point(nodes_list.at(index).x,nodes_list.at(index).y), rawPath[goal+1]);
+		    // If point is gate, arrive orthogonally
+			} else if(q_rand_x == gateInfo[0] and q_rand_y == gateInfo[1]){
+				ANGLE = gateInfo[2];
 		    // If point before next goal or next goal is last
 	    	} else {
 		    	ANGLE = compute_angle(Point(nodes_list.at(index).x,nodes_list.at(index).y), rawPath[goal]);
@@ -1104,6 +1110,9 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 					// If going to next (not last) goal
 					if (q_rand_x == rawPath[goal].x and q_rand_y == rawPath[goal].y and rawPath.size() != goal+1){
 						ANGLE = compute_angle(Point(nodes_list.at(index).x,nodes_list.at(index).y), rawPath[goal+1]);
+					// If point is gate, arrive orthogonally
+					} else if(q_rand_x == gateInfo[0] and q_rand_y == gateInfo[1]){
+						ANGLE = gateInfo[2];
 					// If point before next goal or next goal is last
 					} else {
 						ANGLE = compute_angle(Point(nodes_list.at(index).x,nodes_list.at(index).y), rawPath[goal]);
@@ -1205,8 +1214,8 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 			}
 
 		    //if(goalReached){
-		    if(atLeastOneFound and (nodes_list.size() > 20 or loop_cnt == 1000)){		// TODO: remove max nodes
-		    //if(atLeastOneFound and (nodes_list.size() > 100 or loop_cnt == 3000)){	// Add to path if we reached the goal at least once
+		    //if(atLeastOneFound and (nodes_list.size() > 20 or loop_cnt == 1000)){		// TODO: remove max nodes
+		    if(atLeastOneFound and (nodes_list.size() > 50 or loop_cnt == 3000)){	// Add to path if we reached the goal at least once
 
 		        path_pos pos = best_goal_pos;
 		        goalReached = true;
