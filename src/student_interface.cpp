@@ -35,8 +35,8 @@ const double speed = 0.2;	// Should be ~ 0.2 m/s (0.5m/2.5s)
 
 
 //TODO: Change path
-std::ofstream myfile("/home/lar2019/workspace/project/src/results.txt");
-//std::ofstream myfile("/home/robotics/workspace/group_5/src/results.txt");
+//std::ofstream myfile("/home/lar2019/workspace/project/src/results.txt");
+std::ofstream myfile("/home/robotics/workspace/group_5/src/results.txt");
 
 // - - - - - - - - - - - - - - - 
 
@@ -375,8 +375,8 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
   }
  
   const double MIN_AREA_SIZE = 100;
-  std::string template_folder = "/home/lar2019/workspace/project/template/";
-  //std::string template_folder = "/home/robotics/workspace/group_5/template/"; // TODO: Uncomment
+  //std::string template_folder = "/home/lar2019/workspace/project/template/";
+  std::string template_folder = "/home/robotics/workspace/group_5/template/"; // TODO: Uncomment
 
   bool detect_green_victims(const cv::Mat& hsv_img, const double scale, std::vector<std::pair<int,Polygon>>& victim_list){
    
@@ -662,7 +662,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
   bool planPath(const Polygon& borders, const std::vector<Polygon>& obstacle_list, const std::vector<std::pair<int,Polygon>>& victim_list, const Polygon& gate, const float x, const float y, const float theta, Path& path, const std::string& config_folder){
    
     int kmax = 10;      // Max angle of curvature
-    int npts = 100;  // Standard discretization unit of arcs
+    int npts = 50;  // Standard discretization unit of arcs
  
     // - - - GATE CENTER - - -
     double gateX = (gate[0].x + gate[1].x + gate[2].x + gate[3].x)/4;
@@ -1297,7 +1297,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 std::vector<int> Dijkstra(std::vector<std::vector<double>> costmap, const std::vector<std::pair<int,Polygon>>& victim_list){
 
 	std::vector<double> best_cost(costmap.size());
-	std::vector<std::vector<int>> combinations(costmap.size()); 
+	std::vector<std::vector<int>> combinations(costmap.size());
 
 	for (int i = 0; i < costmap.size(); i++){ 			// Row
 		for (int j = 0; j < costmap.size()-i; j++){		// Column
@@ -1311,15 +1311,57 @@ std::vector<int> Dijkstra(std::vector<std::vector<double>> costmap, const std::v
 				
 				combinations[j+i] = {};
 				
-				//combinations[j+i] = combinations[i-1];
-				
+				// If START point has a combination, add it as well
 				if (combinations[i-1].size() > 0){
 					for (int k = 0; k < combinations[i-1].size(); k++){
 						combinations[j+i].push_back(combinations[i-1][k]);
 					}
 				}
 				
+				// Then add link we just found
 				combinations[j+i].push_back(i-1);
+				
+				
+				// REWIRING - Check if can be PARENT node of other points
+				for (int rew = 0; rew < costmap.size(); rew++){
+					// Do NOT check nodes that are parents of this point AND see if cost would be lower
+					if (!(std::find(combinations[j+i].begin(), combinations[j+i].end(), rew!= combinations[j+i].end()))){
+					
+						if (rew < j+i and costmap[rew][j+i] + best_cost[j+i] < best_cost[rew]){
+					
+							best_cost[rew] = costmap[rew][j+i] + best_cost[j+i];
+							combinations[rew] = {};
+						
+							if (combinations[j+i].size() > 0){
+								for (int k = 0; k < combinations[j+i].size(); k++){
+									combinations[rew].push_back(combinations[i-1][rew]);
+								}
+							}
+				
+							// Then add link we just found
+							combinations[rew].push_back(j+i);
+							
+						} else if (rew > j+i and costmap[j+i][rew] + best_cost[j+i] < best_cost[rew]) {
+						
+							best_cost[rew] = costmap[j+i][rew] + best_cost[j+i];
+							combinations[rew] = {};
+						
+							if (combinations[j+i].size() > 0){
+								for (int k = 0; k < combinations[j+i].size(); k++){
+									combinations[rew].push_back(combinations[rew][i-1]);
+								}
+							}
+				
+							// Then add link we just found
+							combinations[rew].push_back(j+i);
+						
+						
+						
+						}
+						
+					}
+				}
+				
 				
 				// PRINT
 				std::cout << "Combination at " << i << "," << j+i << " : ";
