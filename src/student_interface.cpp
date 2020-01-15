@@ -23,15 +23,20 @@ namespace student {
 
 // Thresholds for resetting tree
 const int max_nodes = 100;	//TODO: change
-const int max_loops = 5000;
+const int max_loops = 2000;
 
 // RRT* switch
 const bool RRT_STAR = true;
 
 // Choose mission & params
-const bool mission_2 = false;
+const bool mission_2 = true;
 const int bonus = 2;	// Bonus time for picking up victim (seconds)
 const double speed = 0.2;	// Should be ~ 0.2 m/s (0.5m/2.5s)	
+
+
+//TODO: Change path
+std::ofstream myfile("/home/lar2019/workspace/project/src/results.txt");
+//std::ofstream myfile("/home/robotics/workspace/group_5/src/results.txt");
 
 // - - - - - - - - - - - - - - - 
 
@@ -370,8 +375,8 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
   }
  
   const double MIN_AREA_SIZE = 100;
-  //std::string template_folder = "/home/lar2019/workspace/project/template/";
-  std::string template_folder = "/home/robotics/workspace/group_5/template/"; // TODO: Uncomment
+  std::string template_folder = "/home/lar2019/workspace/project/template/";
+  //std::string template_folder = "/home/robotics/workspace/group_5/template/"; // TODO: Uncomment
 
   bool detect_green_victims(const cv::Mat& hsv_img, const double scale, std::vector<std::pair<int,Polygon>>& victim_list){
    
@@ -799,13 +804,35 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 			}	// End 2nd loop
 		}	// End 1st loop
 
-		// Print costmap
+		// Print/write costmap
+		
+		myfile << "\t\t";
+		
+		for (int i = 0; i < costmap.size(); i++){
+			if (i == costmap.size()-1){
+				myfile << "Goal";
+			} else {
+				myfile << "\t" << i+1 << "\t";
+			}
+		}
+		myfile << std::endl;
 
 		for (int i = 0; i < costmap.size(); i++){
+			if (i == 0){
+				myfile << "Start" << "\t";
+			} else {
+				myfile << "\t" << i << "\t";
+			} 
 			for (int j = 0; j < costmap.size(); j++){
 				std::cout << costmap[i][j] << " ";
+				if (costmap[i][j] == 0){
+					myfile << "\t" << costmap[i][j] << "\t";
+				} else {
+					myfile << costmap[i][j] << "\t";
+				}
 			}
 			std::cout << std::endl;
+			myfile << std::endl;
 		}
 		
 		// Find best cost path
@@ -822,6 +849,8 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		RRT(theta, path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, length_path, gateInfo);	//TODO: Change 0 to theta
 
   	}	// End mission 2
+      
+    myfile.close();
        
 }
 
@@ -858,6 +887,8 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 	int goal = 1; //The first goal is the first number
 	bool failed_to_reach_goal = false;
 	bool trying_for_goal = false;
+	
+	int wrong_initial_angles = 0;
 
 	while(goal < rawPath.size()){
 	
@@ -904,7 +935,20 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		    		loop_cnt = 1;
 		    		//std::cout << "Resetting: NOT CONVERGING" << std::endl;
 		    		// TODO: remove to not exit code
-		    		throw std::runtime_error("Resetting: NOT CONVERGING");
+		    		//throw std::runtime_error("Resetting: NOT CONVERGING");
+		    		
+		    		// TODO: remove to not look for other initial angles
+		    		if (mission_2 and wrong_initial_angles < 2){
+		    			if (wrong_initial_angles == 0){
+		    				nodes_list.at(0).theta = theta + 0.523;
+		    			} else {
+		    				nodes_list.at(0).theta = theta - 0.523;
+		    			}
+		    			wrong_initial_angles += 1;
+		    		} else {
+		    			throw std::runtime_error("Resetting: NOT CONVERGING");
+		    		}
+		    		
 		    	} else {
 		    		std::cout << "Resetting: TOO MANY NODES" << std::endl;
 		    	}
@@ -1022,8 +1066,6 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		    
 		    if(!collision){
 		        
-		        //std::cout << "NO COLLISION" << std::endl;
-		        
 		        failed_to_reach_goal = false;
 	
 		        path_pos new_node = {};
@@ -1088,7 +1130,8 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 	        q_rand_y = samp_Y/100.00;
 	        rand_count += 1;
 
-	        if (rand_count % 2 == 0){	// 50% of times next goal
+	        //if (rand_count % 2 == 0){	// 50% of times next goal
+	        if (rand_count % 5 == 0){
 	        //if (rand_count % 2 == 0 and !atLeastOneFound){ //TODO: remove
 	            q_rand_x =  rawPath[goal].x;
 	            q_rand_y =  rawPath[goal].y;
@@ -1214,8 +1257,8 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 			}
 
 		    //if(goalReached){
-		    //if(atLeastOneFound and (nodes_list.size() > 20 or loop_cnt == 1000)){		// TODO: remove max nodes
-		    if(atLeastOneFound and (nodes_list.size() > 50 or loop_cnt == 3000)){	// Add to path if we reached the goal at least once
+		    if(atLeastOneFound and (nodes_list.size() > 20 or loop_cnt == 1000)){		// TODO: remove max nodes
+		    //if(atLeastOneFound and (nodes_list.size() > 50 or loop_cnt == 3000)){	// Add to path if we reached the goal at least once
 
 		        path_pos pos = best_goal_pos;
 		        goalReached = true;
@@ -1291,15 +1334,20 @@ std::vector<int> Dijkstra(std::vector<std::vector<double>> costmap, const std::v
 
 	// Print result
 	std::cout << std::endl << "Best time to goal: " << best_cost.back() << std::endl;
+	myfile << std::endl << std::endl << "Best time to goal: " << best_cost.back() << std::endl;
 	std::cout << "With combination:";
+	myfile << "With combination:";
 	for (int i = 0; i < combinations.back().size(); i++){
 		if (i != 0){
-			std::cout << ", " << std::get<0>(victim_list[combinations.back()[i]]); 
+			std::cout << ", " << std::get<0>(victim_list[combinations.back()[i]]);
+			myfile << ", " << std::get<0>(victim_list[combinations.back()[i]]); 
 		} else {
 			std::cout << " " << std::get<0>(victim_list[combinations.back()[i]]);
+			myfile << " " << std::get<0>(victim_list[combinations.back()[i]]);
 		}
 	}
 	std::cout << std::endl << std::endl;
+	myfile << std::endl << std::endl;
 
 	return combinations.back();
 
