@@ -24,7 +24,7 @@ namespace student {
 // Thresholds for resetting tree
 const int max_nodes = 100;	//TODO: change
 const int max_loops = 2000;
-const int least_nodes = 30;
+const int least_nodes = 20;
 
 // RRT* switch
 const bool RRT_STAR = true;
@@ -36,8 +36,8 @@ const double speed = 0.2;	// Should be ~ 0.2 m/s (0.5m/2.5s)
 
 
 //TODO: Change path
-//std::ofstream myfile("/home/lar2019/workspace/project/src/results.txt");
-std::ofstream myfile("/home/robotics/workspace/group_5/src/results.txt");
+std::ofstream myfile("/home/lar2019/workspace/project/src/results.txt");
+//std::ofstream myfile("/home/robotics/workspace/group_5/src/results.txt");
 
 // - - - - - - - - - - - - - - - 
 
@@ -281,15 +281,17 @@ static bool state = false;
         ClipperLib::Paths newPoly;
         ClipperLib::ClipperOffset co;
  
+ 		// Iterate through obstacles
         for (int ver = 0; ver < obstacle_list[obs].size(); ++ver){
             int x = obstacle_list[obs][ver].x * INT_ROUND;
             int y = obstacle_list[obs][ver].y * INT_ROUND;
+            // Add list of points to path
             srcPoly << ClipperLib::IntPoint(x,y);
         }
  
- 
+ 		// Provides methods to offset given path
         co.AddPath(srcPoly, ClipperLib::jtSquare, ClipperLib::etClosedPolygon);
- 
+
         co.Execute(newPoly, 50);    // TOTO: Change obstacle inflation idx
  
         for (const ClipperLib::Path &path: newPoly){
@@ -376,8 +378,8 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
   }
  
   const double MIN_AREA_SIZE = 100;
-  //std::string template_folder = "/home/lar2019/workspace/project/template/";
-  std::string template_folder = "/home/robotics/workspace/group_5/template/"; // TODO: Uncomment
+  std::string template_folder = "/home/lar2019/workspace/project/template/";
+  //std::string template_folder = "/home/robotics/workspace/group_5/template/"; // TODO: Uncomment
 
   bool detect_green_victims(const cv::Mat& hsv_img, const double scale, std::vector<std::pair<int,Polygon>>& victim_list){
    
@@ -636,6 +638,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
     Point p1, p2;
  
     p1 = obstacle.at(0);
+    // Iterate through obstacles
     for(int i = 1; i <= N; i++){
         p2 = obstacle.at(i % N);
         if(pt.y > std::min(p1.y, p2.y)){
@@ -776,6 +779,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 
 	if (!mission_2){
 
+		//Add victims as major points
 		rawPath.push_back(Point(x,y));
 		for (int i = 0; i < victim_center.size(); i++){
 		    rawPath.push_back(victim_center[i]);
@@ -799,6 +803,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 
 		int cnt = 1;
 
+		// Loop to compute costs in pair-wise combination
 		for (int i = 0; i < victim_center.size()+1; i++){			
 			for (int j = 0; j < victim_center.size()+1-i; j++){
 
@@ -819,7 +824,6 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 					rawPath.push_back(victim_center[i+j]);
 				}
 
-				// TODO: Make it so that angle can vary at beginning
 				double temp_theta = compute_angle(rawPath[0],rawPath[1]);
 				double length_path = 0;			
 
@@ -874,6 +878,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		// Find best cost path
 		std::vector<int> best_conf = Dijkstra(costmap, victim_list);
 		
+		// Add major points to general rawPath
 		rawPath.push_back(Point(x,y));
 		for (int i = 0; i < best_conf.size(); i++){
 		    rawPath.push_back(victim_center[best_conf[i]]);
@@ -882,6 +887,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		
 		double length_path = 0;
 		
+		// Compute the planning
 		RRT(theta, path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, length_path, gateInfo);
 
   	}	// End mission 2
@@ -1083,7 +1089,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 
 			// Check arena borders
 		    for(int j=0; j<newPath.points.size(); j++){
-		        if(newPath.points.at(j).x < (borders[0].x + 0.02) or newPath.points.at(j).x > (borders[1].x - 0.02) or newPath.points.at(j).y < (borders[0].y + 0.02)  or newPath.points.at(j).y > (borders[3].y - 0.02)){
+		        if(newPath.points.at(j).x < (borders[0].x + 0.04) or newPath.points.at(j).x > (borders[1].x - 0.04) or newPath.points.at(j).y < (borders[0].y + 0.04)  or newPath.points.at(j).y > (borders[3].y - 0.04)){
 		            collision = true;
 		            if(trying_for_goal){failed_to_reach_goal = true; trying_for_goal = false;}        
 		            break; 
@@ -1094,7 +1100,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		            double dist_to_ob = sqrt(pow((newPath.points.at(j).x-obs_center.at(i).x),2)+pow((newPath.points.at(j).y-obs_center.at(i).y),2));
 		            double result = insidePolygon(obstacle_list.at(i), Point(newPath.points.at(j).x,newPath.points.at(j).y)); // Possibly useless, since we check the radius of the obstacle anyways
 		           
-		            if(result != 1 or dist_to_ob < (obs_radius.at(i)+0.04)){
+		            if(result != 1 or dist_to_ob < (obs_radius.at(i)+0.05)){
 		                collision = true;
 		                if(trying_for_goal){failed_to_reach_goal = true;trying_for_goal = false;}
 		                break; 
@@ -1169,7 +1175,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 	        rand_count += 1;
 
 	        //if (rand_count % 2 == 0){	// 50% of times next goal
-	        if (rand_count % 5 == 0){
+	        if (rand_count % 5 == 0){ // Pick goal every 5 iterations
 	        //if (rand_count % 2 == 0 and !atLeastOneFound){ //TODO: remove
 	            q_rand_x =  rawPath[goal].x;
 	            q_rand_y =  rawPath[goal].y;
@@ -1234,7 +1240,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 								double dist_to_ob = sqrt(pow((newPath.points.at(j).x-obs_center.at(k).x),2)+pow((newPath.points.at(j).y-obs_center.at(k).y),2));
 								double result = insidePolygon(obstacle_list.at(k), Point(newPath.points.at(j).x,newPath.points.at(j).y)); // Possibly useless, since we check the radius of the obstacle anyways
 							   
-								if(result != 1 or dist_to_ob < (obs_radius.at(k)+0.04)){
+								if(result != 1 or dist_to_ob < (obs_radius.at(k)+0.05)){
 									collision = true;
 									if(trying_for_goal){failed_to_reach_goal = true;trying_for_goal = false;}
 									break; 
@@ -1397,39 +1403,6 @@ std::vector<int> Dijkstra(std::vector<std::vector<double>> costmap, const std::v
 			}	// END column
 		}	// END row	
 	} // END while
-
-	/*for (int i = 0; i < costmap.size(); i++){ 			// Row
-		for (int j = 0; j < costmap.size()-i; j++){		// Column
-			// Initially, best cost is first row
-			if (i == 0){
-				best_cost[j] = costmap[i][j];
-			// Then it is updated only if better cost
-			} else if (costmap[i][j+i] + best_cost[i-1] < best_cost[j+i]){
-			
-				best_cost[j+i] = costmap[i][j+i] + best_cost[i-1];
-			
-				combinations[j+i] = {};
-			
-				// If START point has a combination, add it as well
-				if (combinations[i-1].size() > 0){
-					for (int k = 0; k < combinations[i-1].size(); k++){
-						combinations[j+i].push_back(combinations[i-1][k]);
-					}
-				}
-			
-				// Then add link we just found
-				combinations[j+i].push_back(i-1);	
-			
-				// PRINT
-				std::cout << "Combination at " << i << "," << j+i << " : ";
-				for (int k = 0; k < combinations[j+i].size(); k++){
-					std::cout << std::get<0>(victim_list[combinations[j+i][k]]) <<  " ";
-				}
-				std::cout << std::endl;
-			
-			}	// END if/else
-		}	// END column
-	}*/	// END row
 
 	// Print result
 	std::cout << std::endl << "Best time to goal: " << best_cost.back() << std::endl;
