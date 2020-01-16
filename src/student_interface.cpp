@@ -36,8 +36,8 @@ const double speed = 0.2;	// Should be ~ 0.2 m/s (0.5m/2.5s)
 
 
 //TODO: Change path
-std::ofstream myfile("/home/lar2019/workspace/project/src/results.txt");
-//std::ofstream myfile("/home/robotics/workspace/group_5/src/results.txt");
+//std::ofstream myfile("/home/lar2019/workspace/project/src/results.txt");
+std::ofstream myfile("/home/robotics/workspace/group_5/src/results.txt");
 
 // - - - - - - - - - - - - - - - 
 
@@ -378,8 +378,8 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
   }
  
   const double MIN_AREA_SIZE = 100;
-  std::string template_folder = "/home/lar2019/workspace/project/template/";
-  //std::string template_folder = "/home/robotics/workspace/group_5/template/"; // TODO: Uncomment
+  //std::string template_folder = "/home/lar2019/workspace/project/template/";
+  std::string template_folder = "/home/robotics/workspace/group_5/template/"; // TODO: Uncomment
 
   bool detect_green_victims(const cv::Mat& hsv_img, const double scale, std::vector<std::pair<int,Polygon>>& victim_list){
    
