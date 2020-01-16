@@ -24,12 +24,13 @@ namespace student {
 // Thresholds for resetting tree
 const int max_nodes = 100;	//TODO: change
 const int max_loops = 2000;
+const int least_nodes = 30;
 
 // RRT* switch
 const bool RRT_STAR = true;
 
 // Choose mission & params
-const bool mission_2 = true;
+const bool mission_2 = false;
 const int bonus = 2;	// Bonus time for picking up victim (seconds)
 const double speed = 0.2;	// Should be ~ 0.2 m/s (0.5m/2.5s)	
 
@@ -670,13 +671,49 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
  
     // Compute gate orientation
     double gateTh;
-    double dist_1 = sqrt(pow(gate[0].x-gate[1].x,2.0)+pow(gate[0].y-gate[1].y,2.0));
-    double dist_2 = sqrt(pow(gate[1].x-gate[2].x,2.0)+pow(gate[1].y-gate[2].y,2.0));
- 
-    if (dist_1 < dist_2){
-        gateTh = acos(fabs(gate[0].x-gate[1].x) / dist_1);
+    
+    // Left
+    if (fabs(gateX - borders[0].x) < fabs(gateX - borders[1].x)){
+    	// Bottom-left
+    	if (fabs(gateY - borders[0].y) < fabs(gateY - borders[3].y)){
+    		// Horizontal
+    		if (fabs(gateY - borders[0].y) < fabs(gateX - borders[0].x)){
+    			gateTh = -M_PI/2;
+    		// Vertical
+    		} else {
+    			gateTh = M_PI;
+    		}
+    	// Top-left
+    	} else {
+    		// Horizontal
+    		if (fabs(gateY - borders[3].y) < fabs(gateX - borders[0].x)){
+    			gateTh = M_PI/2;
+    		// Vertical
+    		} else {
+    			gateTh = M_PI;
+    		}
+    	}
+	// Right
     } else {
-        gateTh = acos(fabs(gate[1].x-gate[2].x) / dist_1);
+    	// Bottom-right
+    	if (fabs(gateY - borders[0].y) < fabs(gateY - borders[3].y)){
+    		// Horizontal
+    		if (fabs(gateY - borders[0].y) < fabs(gateX - borders[1].x)){
+    			gateTh = -M_PI/2;
+    		// Vertical
+    		} else {
+    			gateTh = 0;
+    		}
+    	// Top-right
+    	} else {
+    		// Horizontal
+    		if (fabs(gateY - borders[3].y) < fabs(gateX - borders[1].x)){
+    			gateTh = M_PI/2;
+    		// Vertical
+    		} else {
+    			gateTh = 0;
+    		}
+    	}    
     }
 
     std::vector<double> gateInfo = {gateX, gateY, gateTh};
@@ -804,15 +841,14 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 			}	// End 2nd loop
 		}	// End 1st loop
 
-		// Print/write costmap
-		
+		// Print & write costmap
 		myfile << "\t\t";
 		
 		for (int i = 0; i < costmap.size(); i++){
 			if (i == costmap.size()-1){
 				myfile << "Goal";
 			} else {
-				myfile << "\t" << i+1 << "\t";
+				myfile << "\t" << std::get<0>(victim_list[i]) << "\t";
 			}
 		}
 		myfile << std::endl;
@@ -821,7 +857,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 			if (i == 0){
 				myfile << "Start" << "\t";
 			} else {
-				myfile << "\t" << i << "\t";
+				myfile << "\t" << std::get<0>(victim_list[i-1]) << "\t";
 			} 
 			for (int j = 0; j < costmap.size(); j++){
 				std::cout << costmap[i][j] << " ";
@@ -846,11 +882,13 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		
 		double length_path = 0;
 		
-		RRT(theta, path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, length_path, gateInfo);	//TODO: Change 0 to theta
+		RRT(theta, path, rawPath, borders, kmax, npts, obstacle_list, obs_radius, obs_center, length_path, gateInfo);
 
   	}	// End mission 2
       
     myfile.close();
+    
+    std::cout << "\n\n - - - END OF PLANNING - - - \n\n\n";
        
 }
 
@@ -1257,7 +1295,7 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 			}
 
 		    //if(goalReached){
-		    if(atLeastOneFound and (nodes_list.size() > 20 or loop_cnt == 1000)){		// TODO: remove max nodes
+		    if(atLeastOneFound and (nodes_list.size() > least_nodes or loop_cnt == 1000)){		// TODO: remove max nodes
 		    //if(atLeastOneFound and (nodes_list.size() > 50 or loop_cnt == 3000)){	// Add to path if we reached the goal at least once
 
 		        path_pos pos = best_goal_pos;
@@ -1290,6 +1328,8 @@ cv::Mat rotate(cv::Mat in_ROI, double ang_degrees){
 		}
 
 	}
+	
+	std::cout << "\n - - RRT* OVER - - \n\n";
 
 }
 
@@ -1298,81 +1338,98 @@ std::vector<int> Dijkstra(std::vector<std::vector<double>> costmap, const std::v
 
 	std::vector<double> best_cost(costmap.size());
 	std::vector<std::vector<int>> combinations(costmap.size());
+	bool no_changes = false;
 
-	for (int i = 0; i < costmap.size(); i++){ 			// Row
+	// Loop until it converges (no more changes)
+	while (!no_changes){
+		no_changes = true;
+		for (int i = 0; i < costmap.size(); i++){ 			// Row
+			for (int j = 0; j < costmap.size()-i; j++){		// Column
+			
+				// First time initialize values to first row
+				if (i == 0 and best_cost[j] == 0){
+					best_cost[j] = costmap[i][j];
+					
+				// If current node + current cost < next node
+				} else if (costmap[i][j+i] + best_cost[i-1] < best_cost[j+i] and !(std::find(combinations[i-1].begin(), combinations[i-1].end(), j+i) != combinations[i-1].end())){
+			
+					// Change has occured
+					no_changes = false;
+				
+					// Update best cost
+					best_cost[j+i] = costmap[i][j+i] + best_cost[i-1];
+		
+					combinations[j+i] = {};
+		
+					// If START point has a combination, add it as well
+					if (combinations[i-1].size() > 0){
+						for (int k = 0; k < combinations[i-1].size(); k++){
+							combinations[j+i].push_back(combinations[i-1][k]);
+						}
+					}
+		
+					// Then add link we just found
+					combinations[j+i].push_back(i-1);
+					
+				// If next node + current cost < current node
+				} else if (i > 0 and j+i != costmap.size()-1 and costmap[i][j+i] + best_cost[j+i] < best_cost[i-1] and !(std::find(combinations[j+i].begin(), combinations[j+i].end(), i-1) != combinations[j+i].end())){
+		
+					// Change has occured
+					no_changes = false;
+				
+					// Update best cost
+					best_cost[i-1] = costmap[i][j+i] + best_cost[j+i];
+		
+					combinations[i-1] = {};
+		
+					// If START point has a combination, add it as well
+					if (combinations[j+i].size() > 0){
+						for (int k = 0; k < combinations[j+i].size(); k++){
+							combinations[i-1].push_back(combinations[j+i][k]);
+						}
+					}
+		
+					// Then add link we just found
+					combinations[i-1].push_back(j+i);
+			
+				}	// END if/else
+				
+			}	// END column
+		}	// END row	
+	} // END while
+
+	/*for (int i = 0; i < costmap.size(); i++){ 			// Row
 		for (int j = 0; j < costmap.size()-i; j++){		// Column
 			// Initially, best cost is first row
 			if (i == 0){
 				best_cost[j] = costmap[i][j];
 			// Then it is updated only if better cost
 			} else if (costmap[i][j+i] + best_cost[i-1] < best_cost[j+i]){
-				
+			
 				best_cost[j+i] = costmap[i][j+i] + best_cost[i-1];
-				
+			
 				combinations[j+i] = {};
-				
+			
 				// If START point has a combination, add it as well
 				if (combinations[i-1].size() > 0){
 					for (int k = 0; k < combinations[i-1].size(); k++){
 						combinations[j+i].push_back(combinations[i-1][k]);
 					}
 				}
-				
+			
 				// Then add link we just found
-				combinations[j+i].push_back(i-1);
-				
-				
-				// REWIRING - Check if can be PARENT node of other points
-				for (int rew = 0; rew < costmap.size(); rew++){
-					// Do NOT check nodes that are parents of this point AND see if cost would be lower
-					if (!(std::find(combinations[j+i].begin(), combinations[j+i].end(), rew!= combinations[j+i].end()))){
-					
-						if (rew < j+i and costmap[rew][j+i] + best_cost[j+i] < best_cost[rew]){
-					
-							best_cost[rew] = costmap[rew][j+i] + best_cost[j+i];
-							combinations[rew] = {};
-						
-							if (combinations[j+i].size() > 0){
-								for (int k = 0; k < combinations[j+i].size(); k++){
-									combinations[rew].push_back(combinations[i-1][rew]);
-								}
-							}
-				
-							// Then add link we just found
-							combinations[rew].push_back(j+i);
-							
-						} else if (rew > j+i and costmap[j+i][rew] + best_cost[j+i] < best_cost[rew]) {
-						
-							best_cost[rew] = costmap[j+i][rew] + best_cost[j+i];
-							combinations[rew] = {};
-						
-							if (combinations[j+i].size() > 0){
-								for (int k = 0; k < combinations[j+i].size(); k++){
-									combinations[rew].push_back(combinations[rew][i-1]);
-								}
-							}
-				
-							// Then add link we just found
-							combinations[rew].push_back(j+i);
-						
-						
-						
-						}
-						
-					}
-				}
-				
-				
+				combinations[j+i].push_back(i-1);	
+			
 				// PRINT
 				std::cout << "Combination at " << i << "," << j+i << " : ";
 				for (int k = 0; k < combinations[j+i].size(); k++){
 					std::cout << std::get<0>(victim_list[combinations[j+i][k]]) <<  " ";
 				}
 				std::cout << std::endl;
-				
-			}	
-		}
-	}
+			
+			}	// END if/else
+		}	// END column
+	}*/	// END row
 
 	// Print result
 	std::cout << std::endl << "Best time to goal: " << best_cost.back() << std::endl;
@@ -1390,6 +1447,10 @@ std::vector<int> Dijkstra(std::vector<std::vector<double>> costmap, const std::v
 	}
 	std::cout << std::endl << std::endl;
 	myfile << std::endl << std::endl;
+
+	for (int i = 0; i < combinations.back().size(); i++){
+		std::cout << combinations.back()[i] << std::endl;
+	}
 
 	return combinations.back();
 
